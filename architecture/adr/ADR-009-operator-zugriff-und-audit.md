@@ -45,7 +45,7 @@ Alles unterhalb der Mandanten-Wurzel (Schulen, Instanzen, Schemas) wird im Norma
 
 - Es gibt zwei benannte Datasources: `<default>` (User `edugate_control`) und `operator` (User `edugate_operator`).
 - Die `operator`-Datasource ist ausschließlich in einer Komponente **`OperatorAccess`** (eigenes Package `…control.operator`) nutzbar. Repositories und Services außerhalb dieses Packages erhalten keine Injektion der Operator-Datasource; ein Architektur-Test (z. B. ArchUnit) erzwingt das.
-- Jede Operation über `OperatorAccess` schreibt **synchron in derselben Transaktion** einen Eintrag in die Tabelle `audit_admin`.
+- Jede Operation über `OperatorAccess` schreibt einen Eintrag in die Tabelle `audit_admin`. **Transaktionsregel:** Bei `SUCCESS` erfolgt der Audit-Eintrag in derselben Transaktion wie die fachliche Änderung (atomar: keine Änderung ohne Audit-Eintrag, kein Audit-Eintrag ohne Änderung). Bei `DENIED` und `ERROR` wird die fachliche Transaktion zurückgerollt und der Audit-Eintrag anschließend in einer **eigenen, unabhängigen Transaktion** geschrieben (`REQUIRES_NEW` bzw. programmatische Transaktion), damit er das Rollback überlebt.
 
 ### Audit-Modell (`audit_admin`)
 
@@ -66,7 +66,7 @@ Pflichtfelder je Eintrag:
 ### Test-Invarianten
 
 1. Cross-Tenant-Negativtest: Als `edugate_control` mit Tenant-Kontext A liefert ein `SELECT` auf Daten von Tenant B null Zeilen.
-2. Jede `OperatorAccess`-Operation erzeugt genau einen `audit_admin`-Eintrag (Happy Path und `DENIED`/`ERROR`).
+2. Jede `OperatorAccess`-Operation erzeugt genau einen `audit_admin`-Eintrag. Im Happy Path atomar mit der Änderung; im `ERROR`-Fall (Test provoziert einen Fehler mit Rollback der Fachtransaktion) ist der Audit-Eintrag mit `outcome = ERROR` dennoch persistiert, die fachliche Änderung dagegen nicht.
 3. Architektur-Test: Die Operator-Datasource wird außerhalb des `operator`-Packages nicht referenziert.
 4. `audit_admin` verweigert `UPDATE`/`DELETE` für Anwendungsrollen.
 
@@ -82,6 +82,7 @@ Pflichtfelder je Eintrag:
 
 - Zweite Datasource und Audit-Schreibpfad erhöhen den Scaffolding-Umfang moderat.
 - `SCHULTRAEGER_LIST`-Audits können bei intensiver UI-Nutzung Volumen erzeugen → bewusst in Kauf genommen; Aufbewahrung/Verdichtung wird bei Bedarf in einem eigenen ADR geregelt.
+- Der Fehler-Audit-Pfad in eigener Transaktion kann im Extremfall (z. B. Datenbank nicht erreichbar) selbst fehlschlagen; als Rückfallebene wird der Vorgang zusätzlich im strukturierten Anwendungslog protokolliert.
 
 ## Verweise
 

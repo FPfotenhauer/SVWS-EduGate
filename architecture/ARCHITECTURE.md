@@ -58,6 +58,8 @@ SVWS-EduGate ist ein Werkzeug für **Dienstleister**, die SVWS-Server für mehre
 | Open Source | Veröffentlichung unter freier Lizenz; keine Abhängigkeit von Komponenten mit unklarer Lizenz (siehe [ADR-006](./adr/ADR-006-secret-handling-svws-credentials.md)). |
 | Interne Nutzung zuerst | Phase 1 ausschließlich im internen RZ-Netz; externe Exponierung ist eine spätere, bewusst dazuschaltbare Ausbaustufe (siehe [ADR-007](./adr/ADR-007-netzzonenkonzept.md)). |
 
+Die projektbezogene Sicherheits- und Compliance-Dokumentation wird im Ordner [`compliance/`](../compliance/README.md) fortgeschrieben. Sie bildet BSI-/DSGVO-Bezuege auf konkrete ADRs, Tests und Betriebsnachweise ab.
+
 ---
 
 ## 3. Kontextabgrenzung

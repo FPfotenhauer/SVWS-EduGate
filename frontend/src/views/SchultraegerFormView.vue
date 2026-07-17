@@ -60,7 +60,7 @@ async function absenden(): Promise<void> {
       </div>
 
       <div class="aktionen">
-        <button type="submit" :disabled="speichern">Speichern</button>
+        <button type="submit" class="button-primary" :disabled="speichern">Speichern</button>
         <RouterLink :to="{ name: 'schultraeger-liste' }">Abbrechen</RouterLink>
       </div>
     </form>
@@ -83,6 +83,6 @@ async function absenden(): Promise<void> {
 }
 
 .fehler {
-  color: #b3261e;
+  color: var(--error);
 }
 </style>

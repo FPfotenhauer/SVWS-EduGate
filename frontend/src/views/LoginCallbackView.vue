@@ -20,7 +20,7 @@ onMounted(async () => {
 <template>
   <main class="callback">
     <p v-if="!fehler">Anmeldung wird abgeschlossen …</p>
-    <p v-else role="alert">{{ fehler }}</p>
+    <p v-else role="alert" class="fehler">{{ fehler }}</p>
   </main>
 </template>
 
@@ -30,5 +30,9 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
+}
+
+.fehler {
+  color: var(--error);
 }
 </style>

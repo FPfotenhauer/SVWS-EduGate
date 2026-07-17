@@ -75,7 +75,9 @@ async function bestaetigenDeaktivieren(): Promise<void> {
             <RouterLink :to="{ name: 'schultraeger-bearbeiten', params: { id: schultraeger.id } }">
               Bearbeiten
             </RouterLink>
-            <button v-if="schultraeger.aktiv" type="button" @click="zuDeaktivieren = schultraeger">Deaktivieren</button>
+            <button v-if="schultraeger.aktiv" type="button" class="danger" @click="zuDeaktivieren = schultraeger">
+              Deaktivieren
+            </button>
           </td>
         </tr>
         <tr v-if="store.items.length === 0">
@@ -125,20 +127,25 @@ th,
 td {
   text-align: left;
   padding: 0.5rem;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid var(--line);
 }
 
 .aktionen {
   display: flex;
+  align-items: center;
   gap: 0.75rem;
 }
 
+.status {
+  font-weight: 600;
+}
+
 .status-aktiv {
-  color: #1a7f37;
+  color: var(--accent);
 }
 
 .status-inaktiv {
-  color: #6e7781;
+  color: var(--ink-soft);
 }
 
 .pagination {
@@ -149,7 +156,7 @@ td {
 }
 
 .fehler {
-  color: #b3261e;
+  color: var(--error);
 }
 
 .sr-only {

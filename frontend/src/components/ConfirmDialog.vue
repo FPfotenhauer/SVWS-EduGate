@@ -25,18 +25,20 @@ const emit = defineEmits<{ confirm: []; cancel: [] }>()
 .dialog-overlay {
   position: fixed;
   inset: 0;
-  background: rgb(0 0 0 / 45%);
+  background: var(--overlay);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .dialog {
-  background: white;
-  color: #1a1a1a;
-  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 12px;
   padding: 1.5rem;
   max-width: 28rem;
+  box-shadow: var(--shadow);
 }
 
 .dialog-actions {
@@ -44,13 +46,5 @@ const emit = defineEmits<{ confirm: []; cancel: [] }>()
   justify-content: flex-end;
   gap: 0.75rem;
   margin-top: 1.5rem;
-}
-
-.danger {
-  background: #b3261e;
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
 }
 </style>

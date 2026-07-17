@@ -99,7 +99,8 @@ flowchart TB
 | Problem | Strategie | ADR |
 |---------|-----------|-----|
 | Zwei Produktziele mit unterschiedlichen Sicherheits- und Lastprofilen | Strikte Trennung von Control Plane (Verwaltung) und Data Plane (Gateway) als getrennte Services im Monorepo. | [ADR-001](./adr/ADR-001-trennung-control-plane-data-plane.md) |
-| Mandantentrennung bei mehreren hundert Schulen | `tenant_id` auf jeder Tabelle plus PostgreSQL Row-Level Security als zweite Verteidigungslinie. | [ADR-002](./adr/ADR-002-mandantenmodell-postgresql-rls.md) |
+| Mandantentrennung bei mehreren hundert Schulen | `tenant_id` auf jeder Tabelle plus PostgreSQL Row-Level Security als zweite Verteidigungslinie; Wurzeltabelle `schultraeger` mit Policy auf die eigene `id`. | [ADR-002](./adr/ADR-002-mandantenmodell-postgresql-rls.md), [ADR-008](./adr/ADR-008-rls-wurzeltabelle-schultraeger.md) |
+| Mandantenübergreifende Admin-Zugriffe ohne Aushebelung der RLS | Kein `BYPASSRLS`; explizite Operator-Policies je Tabelle, gekapselter `OperatorAccess`-Pfad mit Pflicht-Audit (`audit_admin`). | [ADR-009](./adr/ADR-009-operator-zugriff-und-audit.md) |
 | Technologie-Kontinuität und SVWS-Nähe | Quarkus (Java 21) im Backend, Vue 3 + TypeScript + Vite + Pinia im Frontend. | [ADR-003](./adr/ADR-003-quarkus-backend.md) |
 | Gateway-Funktionalität ohne Betriebs-Overhead | Eigener schlanker Quarkus-Gateway-Service statt Fertigprodukt; Austauschoption dokumentiert. | [ADR-004](./adr/ADR-004-api-gateway-eigenbau.md) |
 | Authentifizierung und Autorisierung | Keycloak (OIDC) selbst gehostet; Rollen- und Scope-Modell entlang der Mandantenhierarchie. | [ADR-005](./adr/ADR-005-keycloak-oidc-rollenmodell.md) |
@@ -275,7 +276,7 @@ Details zu Zonen, Firewall-Regeln und der Ausbaustufe „extern“: [ADR-007](./
 
 ## 8. Querschnittliche Konzepte
 
-- **Mandantenfähigkeit:** `tenant_id` (= Schulträger) auf jeder Tabelle; PostgreSQL Row-Level Security; Mandantenkontext wird pro Request aus dem Token abgeleitet, nie aus Client-Parametern allein ([ADR-002](./adr/ADR-002-mandantenmodell-postgresql-rls.md)).
+- **Mandantenfähigkeit:** `tenant_id` (= Schulträger) auf jeder Tabelle; PostgreSQL Row-Level Security mit `FORCE`; Mandantenkontext wird pro Request aus dem Token abgeleitet, nie aus Client-Parametern allein ([ADR-002](./adr/ADR-002-mandantenmodell-postgresql-rls.md), Wurzeltabelle: [ADR-008](./adr/ADR-008-rls-wurzeltabelle-schultraeger.md)). Mandantenübergreifende Admin-Operationen laufen ausschließlich über den auditierten Operator-Pfad ([ADR-009](./adr/ADR-009-operator-zugriff-und-audit.md)).
 - **Sicherheit:** OIDC überall; TLS nach BSI TR-02102-2; mTLS in internen Zonen; Security-Header und CSP im Frontend; keine Secrets im Frontend oder in Logs.
 - **Protokollierung:** Strukturierte Logs (JSON); getrenntes, unveränderliches Audit-Log für Gateway-Zugriffe (OPS.1.1.5, DSGVO Art. 32); keine personenbezogenen Nutzdaten in Logs.
 - **Fehlerbehandlung:** SVWS-Instanzen können nicht erreichbar sein – Statusmodell je Instanz (OK, DEGRADED, UNREACHABLE), Timeouts und Circuit-Breaker im Gateway.

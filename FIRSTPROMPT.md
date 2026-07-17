@@ -10,7 +10,7 @@
 Du arbeitest im Repository **SVWS-EduGate**. Lies zuerst vollständig:
 
 1. `architecture/ARCHITECTURE.md` (arc42, Kapitel 1–12)
-2. Alle ADRs unter `architecture/adr/` (ADR-001 bis ADR-007)
+2. Alle ADRs unter `architecture/adr/` (ADR-001 bis ADR-009; beachte insbesondere ADR-008 und ADR-009, die ADR-002 präzisieren)
 
 Diese Dokumente sind **verbindlich**. Wenn du bei der Umsetzung auf einen Widerspruch oder eine Lücke stößt, triff keine stillschweigende Abweichung: Stelle die Frage bzw. schlage die Abweichung explizit vor und begründe sie. Architekturrelevante Abweichungen erfordern ein neues ADR (Vorlage: `architecture/adr/ADR-TEMPLATE.md`).
 
@@ -67,16 +67,20 @@ SVWS-EduGate/
 
 ### 2. Flyway-Migration `V1__initial_schema.sql` (Control Plane)
 
-Gemäß ADR-002, wörtlich umzusetzen:
+Gemäß ADR-002 in der durch ADR-008 und ADR-009 präzisierten Fassung, wörtlich umzusetzen:
 
 - Tabellen `schultraeger`, `schule`, `svws_instanz`, `schema` entsprechend dem ER-Modell; alle IDs `uuid` mit `gen_random_uuid()`; Zeitstempel `created_at`/`updated_at`; `schultraeger` zusätzlich mit `aktiv boolean not null default true` (Deaktivieren statt Löschen).
-- `tenant_id uuid not null` auf `schule`, `svws_instanz`, `schema` mit FK auf `schultraeger(id)`; Indizes beginnend mit `(tenant_id, …)`.
-- **Row-Level Security** auf allen Tenant-Tabellen aktivieren (`ENABLE` + `FORCE`). Policy: `tenant_id = current_setting('edugate.tenant_id')::uuid`.
+- `tenant_id uuid not null` auf `schule`, `svws_instanz`, `schema` mit FK auf `schultraeger(id)`; Indizes beginnend mit `(tenant_id, …)`. **`schultraeger` selbst erhält keine `tenant_id`** (ADR-008).
+- **Row-Level Security** auf allen vier Tabellen aktivieren (`ENABLE` + `FORCE`):
+  - `schule`, `svws_instanz`, `schema`: Tenant-Policy `tenant_id = current_setting('edugate.tenant_id')::uuid`.
+  - `schultraeger`: Wurzel-Policy `id = current_setting('edugate.tenant_id')::uuid` (ADR-008).
+  - Zusätzlich je Tabelle die explizite Operator-Policy `FOR ALL TO edugate_operator USING (true) WITH CHECK (true)` (ADR-009).
+- Tabelle **`audit_admin`** gemäß ADR-009 (Felder: `id`, `occurred_at`, `admin_subject`, `action`, `entity_type`, `entity_id` nullable, `tenant_id` nullable, `outcome`, `details jsonb` nullable). Append-only: Anwendungsrollen erhalten nur `INSERT` und `SELECT`, kein `UPDATE`/`DELETE`.
 - Datenbankrollen (Anlage der Rollen in `docker/postgres/init/01-roles.sql`, Grants in der Migration):
-  - `edugate_control` – CRUD auf allen Tabellen, unterliegt RLS.
+  - `edugate_control` – CRUD auf den Fachtabellen, unterliegt RLS; `INSERT`/`SELECT` auf `audit_admin`.
   - `edugate_gateway_ro` – nur `SELECT` auf `schultraeger`, `schule`, `svws_instanz`, `schema`, unterliegt RLS.
-  - `edugate_operator` – `BYPASSRLS` für den Dienstleister-Kontext (Nutzung wird später auditiert).
-- **RLS-Wächter-Test** (Testcontainers): schlägt fehl, sobald irgendeine Tabelle mit Spalte `tenant_id` kein aktives RLS inkl. FORCE hat. Dieser Test ist Pflichtbestandteil der CI-Denkweise des Projekts (ARCHITECTURE.md Kap. 11).
+  - `edugate_operator` – CRUD auf den Fachtabellen über die expliziten Operator-Policies; `INSERT`/`SELECT` auf `audit_admin`. **Kein `BYPASSRLS`** (ADR-009).
+- **RLS-Wächter-Test** (Testcontainers) mit den zwei Prüfregeln aus ADR-008: (1) Jede Tabelle mit Spalte `tenant_id` hat RLS `ENABLE`+`FORCE` und eine Policy auf `tenant_id` gegen `current_setting('edugate.tenant_id')`; (2) `schultraeger` hat RLS `ENABLE`+`FORCE` und eine Policy auf `id` gegen `current_setting('edugate.tenant_id')`. Dieser Test ist Pflichtbestandteil der CI-Denkweise des Projekts (ARCHITECTURE.md Kap. 11).
 
 ### 3. `edugate-control-plane`
 
@@ -89,9 +93,15 @@ Gemäß ADR-002, wörtlich umzusetzen:
   - `PUT /admin/api/v1/schultraeger/{id}`
   - `DELETE /admin/api/v1/schultraeger/{id}` → setzt `aktiv = false` (kein physisches Löschen)
 - Alle Endpunkte erfordern die Realm-Rolle `dienstleister-admin` (`@RolesAllowed`). Requests ohne gültiges Token → 401, ohne Rolle → 403, jeweils als Problem-JSON.
-- Tenant-Kontext: Da der Dienstleister-Admin mandantenübergreifend arbeitet, nutzt die Control Plane in diesem Auftrag die Verbindung als `edugate_control` und setzt bei tenant-gebundenen Zugriffen `SET LOCAL edugate.tenant_id = …` pro Transaktion. Kapsle das in einer wiederverwendbaren `TenantContext`-Komponente – sie wird vom Gateway später mitgenutzt.
+- Datenbankzugriff gemäß ADR-009, zwei benannte Datasources:
+  - `<default>` als `edugate_control` (RLS-gebunden). Tenant-gebundene Zugriffe setzen `SET LOCAL edugate.tenant_id = …` pro Transaktion über eine wiederverwendbare `TenantContext`-Komponente (wird vom Gateway später mitgenutzt; in diesem Auftrag nur durch Tests exerziert, s. u.).
+  - `operator` als `edugate_operator`, ausschließlich nutzbar über die Komponente **`OperatorAccess`** im Package `…control.operator`. Ein ArchUnit-Test erzwingt, dass die Operator-Datasource außerhalb dieses Packages nicht referenziert wird.
+- **Alle fünf Schulträger-Endpunkte laufen über `OperatorAccess`** (Schulträger-CRUD ist per Definition mandantenübergreifend, ADR-009) und schreiben einen `audit_admin`-Eintrag mit den Actions `SCHULTRAEGER_LIST`, `SCHULTRAEGER_CREATE`, `SCHULTRAEGER_READ`, `SCHULTRAEGER_UPDATE`, `SCHULTRAEGER_DEACTIVATE` (`admin_subject` aus dem Token). **Transaktionsregel gemäß ADR-009:** `SUCCESS`-Audit atomar in derselben Transaktion wie die fachliche Änderung; `DENIED`/`ERROR`-Audit nach Rollback der Fachtransaktion in einer eigenen, unabhängigen Transaktion (`REQUIRES_NEW`), zusätzlich Eintrag im strukturierten Anwendungslog.
 - Health: `/q/health/live` und `/q/health/ready` (Readiness prüft DB).
-- Integrationstests (Testcontainers + RestAssured): CRUD-Happy-Path, Validierungsfehler (leerer Name → 400), 401/403-Fälle mit `@TestSecurity`.
+- Integrationstests (Testcontainers + RestAssured):
+  - CRUD-Happy-Path, Validierungsfehler (leerer Name → 400), 401/403-Fälle mit `@TestSecurity`.
+  - Audit-Invariante: Jede Operation über `OperatorAccess` erzeugt genau einen `audit_admin`-Eintrag; im provozierten `ERROR`-Fall ist der Eintrag (`outcome = ERROR`) trotz Rollback der Fachtransaktion persistiert, die fachliche Änderung nicht; `UPDATE`/`DELETE` auf `audit_admin` wird für Anwendungsrollen verweigert.
+  - Cross-Tenant-Negativtest über `TenantContext`: Als `edugate_control` mit Tenant-Kontext A liefert ein `SELECT` auf Zeilen von Tenant B (Testdaten direkt eingefügt) null Zeilen – für `schule` **und** für `schultraeger` (Wurzel-Policy, ADR-008).
 
 ### 4. `edugate-gateway` (nur Skelett)
 
@@ -140,7 +150,7 @@ Netzzonen gemäß ADR-007 als getrennte Compose-Netze nachbilden:
 
 ## Nicht-Ziele dieses Auftrags (bewusst weglassen)
 
-- Keine Gateway-Proxy-Logik, keine Mandanten-Auflösung, kein Audit-Log (ADR-004 → späterer Auftrag).
+- Keine Gateway-Proxy-Logik, keine Mandanten-Auflösung, kein Gateway-Zugriffs-Audit (ADR-004 → späterer Auftrag). Das **Admin-Audit `audit_admin` nach ADR-009 ist davon getrennt und Teil dieses Auftrags** (s. o.).
 - Kein SVWS-Sync, keine SVWS-Client-Schicht, keine Verwaltung von Schulen/Instanzen/Schemas über die API (nur die Tabellen existieren bereits).
 - Keine `schultraeger-admin`-Funktionalität, kein Self-Service.
 - Keine externe Zone, kein Reverse Proxy, kein mTLS (Dev-Umgebung; ADR-007 dokumentiert das Zielbild).
@@ -153,7 +163,8 @@ Netzzonen gemäß ADR-007 als getrennte Compose-Netze nachbilden:
 3. Schulträger lassen sich über die UI anlegen, suchen, bearbeiten und deaktivieren; Deaktivierte sind als solche gekennzeichnet.
 4. `curl` ohne Token auf `GET /admin/api/v1/schultraeger` → 401 Problem-JSON; mit Token ohne Rolle → 403.
 5. `GET /gateway/api/v1/ping` liefert mit Client-Credentials-Token des Demo-Clients 200, ohne Token 401.
-6. `./mvnw verify` ist grün, inklusive RLS-Wächter-Test und SecretStore-Tests; `npm run test` und `npm run lint` sind grün.
+6. `./mvnw verify` ist grün, inklusive RLS-Wächter-Test (beide Regeln aus ADR-008), Cross-Tenant-Negativtest, Audit-Invarianten-Tests, ArchUnit-Test zur Operator-Datasource und SecretStore-Tests; `npm run test` und `npm run lint` sind grün.
+6a. Nach Anlegen und Deaktivieren eines Schulträgers über die UI sind die zugehörigen `audit_admin`-Einträge (CREATE, DEACTIVATE mit `admin_subject` des Dev-Admins) in der Datenbank nachweisbar.
 7. Keine Secrets im Repo (`git grep` auf offensichtliche Muster ist sauber); `.env.example` enthält nur Platzhalter.
 8. OpenAPI-Dokument der Control Plane ist abrufbar und beschreibt alle fünf Endpunkte.
 

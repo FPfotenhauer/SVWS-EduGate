@@ -20,9 +20,9 @@ Gewählt wurde **Option 3**. Konkret:
 
 - Jede mandantenbezogene Tabelle trägt `tenant_id UUID NOT NULL REFERENCES schultraeger(id)`.
 - RLS-Policies erzwingen `tenant_id = current_setting('edugate.tenant_id')::uuid`; die Applikation setzt den Tenant-Kontext pro Request/Transaktion aus dem validierten Token – niemals aus Client-Parametern allein.
-- Der Dienstleister-Admin arbeitet über eine explizite Bypass-Rolle (`edugate_operator`), deren Nutzung auditiert wird.
+- Der Dienstleister-Admin arbeitet über eine explizite Operator-Rolle (`edugate_operator`), deren Nutzung auditiert wird. *(Präzisiert durch [ADR-009](./ADR-009-operator-zugriff-und-audit.md): kein `BYPASSRLS`, sondern explizite Operator-Policies je Tabelle plus Pflicht-Audit.)*
 - Der Gateway-DB-User ist zusätzlich auf `SELECT` der benötigten Tabellen beschränkt (siehe ADR-001).
-- Ein automatisierter Test prüft bei jeder Migration, dass alle Tenant-Tabellen RLS aktiviert haben.
+- Ein automatisierter Test prüft bei jeder Migration, dass alle Tenant-Tabellen RLS aktiviert haben. *(Prüfregeln inkl. Wurzeltabelle `schultraeger` präzisiert in [ADR-008](./ADR-008-rls-wurzeltabelle-schultraeger.md).)*
 
 ## Konsequenzen
 
@@ -39,4 +39,4 @@ Gewählt wurde **Option 3**. Konkret:
 
 ## Verweise
 
-- ADR-001 (getrennte DB-User), ARCHITECTURE.md Kap. 5 (ER-Modell)
+- ADR-001 (getrennte DB-User), ADR-008 (RLS der Wurzeltabelle), ADR-009 (Operator-Zugriff und Audit), ARCHITECTURE.md Kap. 5 (ER-Modell)

@@ -13,6 +13,8 @@ Dieser Ordner enthält alle Architecture Decision Records für SVWS-EduGate im [
 | [ADR-005](./ADR-005-keycloak-oidc-rollenmodell.md) | Keycloak (OIDC) und Rollen-/Scope-Modell | accepted |
 | [ADR-006](./ADR-006-secret-handling-svws-credentials.md) | Secret-Handling für SVWS-Zugangsdaten | accepted |
 | [ADR-007](./ADR-007-netzzonenkonzept.md) | Netzzonenkonzept und externe Ausbaustufe | accepted |
+| [ADR-008](./ADR-008-rls-wurzeltabelle-schultraeger.md) | RLS-Behandlung der Mandanten-Wurzeltabelle `schultraeger` | accepted |
+| [ADR-009](./ADR-009-operator-zugriff-und-audit.md) | Operator-Zugriff und Audit-Modell für Admin-Operationen | accepted |
 
 ## Neues ADR anlegen
 

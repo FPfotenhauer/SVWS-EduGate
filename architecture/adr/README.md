@@ -1,0 +1,21 @@
+# Architekturentscheidungen (ADRs)
+
+Dieser Ordner enthält alle Architecture Decision Records für SVWS-EduGate im [MADR](https://adr.github.io/madr/)-angelehnten Format. Neue ADRs werden fortlaufend nummeriert und ändern einmal getroffene Entscheidungen nicht nachträglich – eine revidierte Entscheidung erhält ein neues ADR, das das alte auf `superseded` setzt.
+
+## Index
+
+| ADR | Titel | Status |
+|-----|-------|--------|
+| [ADR-001](./ADR-001-trennung-control-plane-data-plane.md) | Trennung von Control Plane und Data Plane | accepted |
+| [ADR-002](./ADR-002-mandantenmodell-postgresql-rls.md) | Mandantenmodell mit PostgreSQL Row-Level Security | accepted |
+| [ADR-003](./ADR-003-quarkus-backend.md) | Quarkus (Java 21) als Backend-Framework | accepted |
+| [ADR-004](./ADR-004-api-gateway-eigenbau.md) | API-Gateway als eigener Quarkus-Service | accepted |
+| [ADR-005](./ADR-005-keycloak-oidc-rollenmodell.md) | Keycloak (OIDC) und Rollen-/Scope-Modell | accepted |
+| [ADR-006](./ADR-006-secret-handling-svws-credentials.md) | Secret-Handling für SVWS-Zugangsdaten | accepted |
+| [ADR-007](./ADR-007-netzzonenkonzept.md) | Netzzonenkonzept und externe Ausbaustufe | accepted |
+
+## Neues ADR anlegen
+
+1. [`ADR-TEMPLATE.md`](./ADR-TEMPLATE.md) kopieren und fortlaufend nummerieren.
+2. Status zunächst `proposed`, nach Entscheidung `accepted`.
+3. In dieser Tabelle verlinken.

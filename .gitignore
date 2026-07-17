@@ -1,0 +1,29 @@
+# --- Backend (Maven/Quarkus) ---
+backend/**/target/
+backend/**/.quarkus/
+*.class
+
+# --- Frontend (Node/Vite) ---
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+*.tsbuildinfo
+
+# --- Umgebung / Secrets ---
+.env
+.env.*
+!.env.example
+
+# --- IDE ---
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# --- Logs ---
+*.log
+npm-debug.log*
+
+# --- Docker-Volumes (lokale Entwicklungsdaten) ---
+docker/postgres/data/

@@ -49,6 +49,25 @@ Option 3 wurde verworfen, weil eine redundante, per Konvention identische Spalte
 
 - Die Wurzeltabelle folgt einem eigenen Policy-Muster (`id` statt `tenant_id`) – im Wächter-Test als eigene Regel abgebildet und damit kontrolliert.
 
+## Nachtrag (Umsetzung des ersten vertikalen Durchstichs): Ausnahme für `audit_admin`
+
+Bei der Implementierung von `V1__initial_schema.sql` (ADR-009) stellte sich heraus, dass
+Prüfregel 1 wörtlich genommen auch `audit_admin` erfassen würde: Die Tabelle trägt gemäß
+ADR-009 eine (nullable) Spalte `tenant_id`. `audit_admin` ist jedoch kein mandantenbezogener
+Fachtabellen-Datensatz im Sinne von ADR-002, sondern das Admin-Audit-Log, das der
+Dienstleister-Admin per Definition mandantenübergreifend einsehen kann und das absichtlich
+Zeilen mit `tenant_id IS NULL` enthält (z. B. `SCHULTRAEGER_LIST`). Eine Tenant-Policy nach
+Regel 1 wäre damit für `audit_admin` semantisch falsch.
+
+**Entscheidung:** `audit_admin` ist von Prüfregel 1 ausgenommen. Die Regel gilt nur für
+mandantenbezogene Fachtabellen (in diesem Auftrag: `schule`, `svws_instanz`, `schema`).
+Die Isolation von `audit_admin` erfolgt stattdessen ausschließlich über Tabellenrechte
+(`INSERT`/`SELECT` für Anwendungsrollen, kein `UPDATE`/`DELETE` – Append-only, ADR-009). Der
+RLS-Wächter-Test bildet die Ausnahme explizit und benannt ab (kein stiller Ausschluss): Er
+schließt `audit_admin` namentlich von Prüfregel 1 aus und verifiziert zusätzlich, dass die
+Tabelle tatsächlich eine `tenant_id`-Spalte hat (damit die Ausnahme nicht durch eine spätere
+Schemaänderung unbemerkt gegenstandslos wird).
+
 ## Verweise
 
 - Issue #2, ADR-002 (präzisiert), ADR-009 (Operator-Zugriff)

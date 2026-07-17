@@ -50,41 +50,43 @@ async function bestaetigenDeaktivieren(): Promise<void> {
     <p v-if="store.errorMessage" role="alert" class="fehler">{{ store.errorMessage }}</p>
     <p v-else-if="store.loading">Lädt …</p>
 
-    <table v-else>
-      <caption class="sr-only">
-        Liste der Schulträger
-      </caption>
-      <thead>
-        <tr>
-          <th scope="col">Name</th>
-          <th scope="col">Trägernummer</th>
-          <th scope="col">Status</th>
-          <th scope="col">Aktionen</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="schultraeger in store.items" :key="schultraeger.id">
-          <td>{{ schultraeger.name }}</td>
-          <td>{{ schultraeger.traegernummer }}</td>
-          <td>
-            <span :class="['status', schultraeger.aktiv ? 'status-aktiv' : 'status-inaktiv']">
-              {{ schultraeger.aktiv ? 'Aktiv' : 'Deaktiviert' }}
-            </span>
-          </td>
-          <td class="aktionen">
-            <RouterLink :to="{ name: 'schultraeger-bearbeiten', params: { id: schultraeger.id } }">
-              Bearbeiten
-            </RouterLink>
-            <button v-if="schultraeger.aktiv" type="button" class="danger" @click="zuDeaktivieren = schultraeger">
-              Deaktivieren
-            </button>
-          </td>
-        </tr>
-        <tr v-if="store.items.length === 0">
-          <td colspan="4">Keine Schulträger gefunden.</td>
-        </tr>
-      </tbody>
-    </table>
+    <div v-else class="table-wrap">
+      <table>
+        <caption class="sr-only">
+          Liste der Schulträger
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Trägernummer</th>
+            <th scope="col">Status</th>
+            <th scope="col">Aktionen</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="schultraeger in store.items" :key="schultraeger.id">
+            <td>{{ schultraeger.name }}</td>
+            <td>{{ schultraeger.traegernummer }}</td>
+            <td>
+              <span :class="['status', schultraeger.aktiv ? 'status-aktiv' : 'status-inaktiv']">
+                {{ schultraeger.aktiv ? 'Aktiv' : 'Deaktiviert' }}
+              </span>
+            </td>
+            <td class="aktionen">
+              <RouterLink :to="{ name: 'schultraeger-bearbeiten', params: { id: schultraeger.id } }">
+                Bearbeiten
+              </RouterLink>
+              <button v-if="schultraeger.aktiv" type="button" class="danger" @click="zuDeaktivieren = schultraeger">
+                Deaktivieren
+              </button>
+            </td>
+          </tr>
+          <tr v-if="store.items.length === 0">
+            <td colspan="4">Keine Schulträger gefunden.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <nav class="pagination" aria-label="Seitennavigation">
       <button type="button" :disabled="store.page === 0" @click="vorherigeSeite">Zurück</button>
@@ -107,19 +109,32 @@ async function bestaetigenDeaktivieren(): Promise<void> {
 <style scoped>
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
 }
 
 .search {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   margin: 1rem 0;
 }
 
+.search input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
 table {
   width: 100%;
+  min-width: 32rem;
   border-collapse: collapse;
 }
 
@@ -132,6 +147,7 @@ td {
 
 .aktionen {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
 }
@@ -150,6 +166,7 @@ td {
 
 .pagination {
   display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
   align-items: center;
   margin-top: 1rem;
@@ -165,5 +182,12 @@ td {
   height: 1px;
   overflow: hidden;
   clip: rect(0 0 0 0);
+}
+
+@media (max-width: 640px) {
+  .toolbar {
+    justify-content: center;
+    text-align: center;
+  }
 }
 </style>

@@ -41,8 +41,10 @@ function cycleTheme(): void {
 <style scoped>
 .app-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
   padding: 0.75rem 1.5rem;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
@@ -55,13 +57,28 @@ function cycleTheme(): void {
 
 .app-header-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .app-user {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .app-header {
+    justify-content: center;
+    text-align: center;
+  }
+
+  .app-header-actions,
+  .app-user {
+    justify-content: center;
+    width: 100%;
+  }
 }
 </style>

@@ -56,8 +56,13 @@ Repository (vgl. `.env.example` im Repository-Root, das nur Platzhalter enthält
 - [ ] Backup- und Restore-Verfahren für PostgreSQL festlegen und testen.
 - [ ] Backup-/Recovery-Verfahren für den Master-Key der Credential-Verschlüsselung
       (`EDUGATE_MASTER_KEY`, siehe [ADR-006](../../architecture/adr/ADR-006-secret-handling-svws-credentials.md))
-      festlegen und testen.
+      festlegen und testen. Zugangsdaten und Verbindungstest-Ergebnisse dürfen dabei nie im
+      Klartext in Logs erscheinen – die Control Plane protokolliert nur eine sichere,
+      generische Ergebnis-Meldung ohne Secrets oder interne Details.
 - [ ] mTLS zu den SVWS-Instanzen einrichten, sobald deren Zertifikatskonfiguration das erlaubt.
+- [ ] Erreichbarkeit der konfigurierten SVWS-Instanz-Base-URLs aus der Verwaltungszone
+      sicherstellen (Firewall/Routing gemäß [ADR-007](../../architecture/adr/ADR-007-netzzonenkonzept.md)),
+      da der Verbindungstest der Control Plane sonst grundsätzlich fehlschlägt.
 - [ ] Aufbewahrungsfristen für Admin- und Gateway-Audit-Daten festlegen.
 - [ ] Konkrete BSI-Grundschutz-Bausteinliste mit dem RZ-Betrieb/ISB abgleichen (siehe
       [`compliance/bsi-grundschutz-mapping.md`](../../compliance/bsi-grundschutz-mapping.md)).

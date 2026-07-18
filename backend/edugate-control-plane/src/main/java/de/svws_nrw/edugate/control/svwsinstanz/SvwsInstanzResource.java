@@ -5,6 +5,7 @@ import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsInstanzCredentialsRequest
 import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsInstanzDto;
 import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsInstanzPageDto;
 import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsInstanzUpdateRequest;
+import de.svws_nrw.edugate.core.domain.InstanzStatus;
 import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.inject.Inject;
@@ -47,10 +48,11 @@ public class SvwsInstanzResource {
     public SvwsInstanzPageDto list(
             @QueryParam("page") @DefaultValue("0") final int page,
             @QueryParam("size") @DefaultValue("" + DEFAULT_PAGE_SIZE) final int size,
-            @QueryParam("q") final String q) {
+            @QueryParam("q") final String q,
+            @QueryParam("status") final InstanzStatus status) {
         final int safePage = Math.max(page, 0);
         final int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
-        return service.list(adminSubject(), safePage, safeSize, q);
+        return service.list(adminSubject(), safePage, safeSize, q, status);
     }
 
     @POST
@@ -83,6 +85,13 @@ public class SvwsInstanzResource {
     public Response deactivate(@PathParam("id") final UUID id) {
         service.deactivate(adminSubject(), id);
         return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/{id}/connection-test")
+    @Consumes(MediaType.WILDCARD)
+    public SvwsInstanzDto testConnection(@PathParam("id") final UUID id) {
+        return service.testConnection(adminSubject(), id);
     }
 
     private String adminSubject() {

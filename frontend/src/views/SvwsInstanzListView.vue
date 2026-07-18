@@ -1,20 +1,41 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useSvwsInstanzStore } from '@/stores/svwsInstanzStore'
-import type { SvwsInstanz } from '@/types/svwsInstanz'
+import { ApiError } from '@/types/problem'
+import type { InstanzStatus, SvwsInstanz } from '@/types/svwsInstanz'
 
 const store = useSvwsInstanzStore()
 const suchbegriff = ref('')
-const zuDeaktivieren = ref<SvwsInstanz | null>(null)
+const statusFilterAuswahl = ref<InstanzStatus | ''>('')
+const testendeId = ref<string | null>(null)
+const testFehler = ref<Record<string, string>>({})
+
+// Auswahl je Instanz-ID, seitenübergreifend - Vorbereitung für spätere Massenverwaltung
+// (Arbeitsauftrag: Batch-Verbindungstest, Bulk-Credential-/Schema-Import). Aktuell noch ohne
+// eigene Aktion, nur die Auswahl-UI.
+const ausgewaehlt = ref<Record<string, boolean>>({})
+
+const alleAufSeiteAusgewaehlt = computed(
+  () => store.items.length > 0 && store.items.every((instanz) => ausgewaehlt.value[instanz.id]),
+)
+const teilweiseAusgewaehlt = computed(
+  () => !alleAufSeiteAusgewaehlt.value && store.items.some((instanz) => ausgewaehlt.value[instanz.id]),
+)
+
+function alleAufSeiteUmschalten(): void {
+  const neuerWert = !alleAufSeiteAusgewaehlt.value
+  for (const instanz of store.items) {
+    ausgewaehlt.value[instanz.id] = neuerWert
+  }
+}
 
 const statusLabel: Record<string, string> = { OK: 'OK', DEGRADED: 'Beeinträchtigt', UNREACHABLE: 'Nicht erreichbar' }
 
 onMounted(() => store.fetchList())
 
 function suchen(): void {
-  store.fetchList({ page: 0, q: suchbegriff.value })
+  store.fetchList({ page: 0, q: suchbegriff.value, status: statusFilterAuswahl.value })
 }
 
 function naechsteSeite(): void {
@@ -29,10 +50,31 @@ function vorherigeSeite(): void {
   }
 }
 
-async function bestaetigenDeaktivieren(): Promise<void> {
-  if (!zuDeaktivieren.value) return
-  await store.deactivate(zuDeaktivieren.value.id)
-  zuDeaktivieren.value = null
+async function verbindungstestStarten(instanz: SvwsInstanz): Promise<void> {
+  testFehler.value = { ...testFehler.value, [instanz.id]: '' }
+  testendeId.value = instanz.id
+  try {
+    await store.testConnection(instanz.id)
+  } catch (error) {
+    testFehler.value = {
+      ...testFehler.value,
+      [instanz.id]: error instanceof ApiError ? error.message : 'Verbindungstest fehlgeschlagen.',
+    }
+  } finally {
+    testendeId.value = null
+  }
+}
+
+function formatiereZeitpunkt(iso: string | null): string {
+  return iso
+    ? new Date(iso).toLocaleString('de-DE', {
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '–'
 }
 </script>
 
@@ -44,8 +86,15 @@ async function bestaetigenDeaktivieren(): Promise<void> {
     </header>
 
     <form class="search" @submit.prevent="suchen">
-      <label for="suche">Suche nach Name oder Base-URL</label>
+      <label for="suche">Suche nach Name, Base-URL oder Beschreibung</label>
       <input id="suche" v-model="suchbegriff" type="search" placeholder="z. B. svws.example.org" />
+      <label for="status-filter">Status</label>
+      <select id="status-filter" v-model="statusFilterAuswahl" @change="suchen">
+        <option value="">Alle</option>
+        <option value="OK">OK</option>
+        <option value="DEGRADED">Beeinträchtigt</option>
+        <option value="UNREACHABLE">Nicht erreichbar</option>
+      </select>
       <button type="submit">Suchen</button>
     </form>
 
@@ -59,38 +108,93 @@ async function bestaetigenDeaktivieren(): Promise<void> {
         </caption>
         <thead>
           <tr>
+            <th scope="col" class="checkbox-zelle">
+              <input
+                type="checkbox"
+                aria-label="Alle auf dieser Seite auswählen"
+                :checked="alleAufSeiteAusgewaehlt"
+                :indeterminate="teilweiseAusgewaehlt"
+                @change="alleAufSeiteUmschalten"
+              />
+            </th>
+            <th scope="col">ID</th>
             <th scope="col">Name</th>
             <th scope="col">Base-URL</th>
+            <th scope="col">Beschreibung</th>
             <th scope="col">Status</th>
+            <th scope="col">Zugangsdaten</th>
+            <th scope="col">Letzter Verbindungstest</th>
             <th scope="col">Aktiv/Inaktiv</th>
             <th scope="col">Aktionen</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="instanz in store.items" :key="instanz.id">
+            <td class="checkbox-zelle">
+              <input v-model="ausgewaehlt[instanz.id]" type="checkbox" :aria-label="`'${instanz.name}' auswählen`" />
+            </td>
+            <td class="id-zelle" :title="instanz.id">{{ instanz.id }}</td>
             <td>{{ instanz.name }}</td>
             <td>{{ instanz.baseUrl }}</td>
+            <td class="beschreibung-zelle" :title="instanz.beschreibung ?? ''">
+              {{ instanz.beschreibung ?? '–' }}
+            </td>
             <td>
               <span :class="['status', `status-${instanz.status.toLowerCase()}`]">
                 {{ statusLabel[instanz.status] ?? instanz.status }}
               </span>
             </td>
             <td>
+              <div class="zelle-inline">
+                <span :class="['status', instanz.credentialsHinterlegt ? 'status-aktiv' : 'status-inaktiv']">
+                  {{ instanz.credentialsHinterlegt ? 'Hinterlegt' : 'Nicht hinterlegt' }}
+                </span>
+                <span v-if="instanz.credentialsHinterlegt" class="hinweis-klein">
+                  seit {{ formatiereZeitpunkt(instanz.credentialsUpdatedAt) }}
+                </span>
+              </div>
+            </td>
+            <td>
+              <div class="zelle-inline">
+                <button
+                  type="button"
+                  class="btn-klein"
+                  :disabled="!instanz.credentialsHinterlegt || testendeId === instanz.id"
+                  :title="instanz.credentialsHinterlegt ? '' : 'Keine Zugangsdaten hinterlegt'"
+                  @click="verbindungstestStarten(instanz)"
+                >
+                  {{ testendeId === instanz.id ? 'Teste …' : 'Testen' }}
+                </button>
+                <span v-if="testFehler[instanz.id]" role="alert" class="fehler hinweis-klein">
+                  {{ testFehler[instanz.id] }}
+                </span>
+                <span
+                  v-else-if="instanz.lastConnectionTestAt"
+                  class="hinweis-klein"
+                  :title="instanz.lastConnectionTestMessage ?? ''"
+                >
+                  {{ instanz.lastConnectionTestSuccess ? '✓' : '✗' }}
+                  {{ formatiereZeitpunkt(instanz.lastConnectionTestAt) }}
+                </span>
+                <span v-else class="hinweis-klein">Kein Test</span>
+              </div>
+            </td>
+            <td>
               <span :class="['status', instanz.aktiv ? 'status-aktiv' : 'status-inaktiv']">
                 {{ instanz.aktiv ? 'Aktiv' : 'Deaktiviert' }}
               </span>
             </td>
-            <td class="aktionen">
-              <RouterLink :to="{ name: 'svws-instanz-bearbeiten', params: { id: instanz.id } }">
+            <td>
+              <RouterLink
+                :to="{ name: 'svws-instanz-bearbeiten', params: { id: instanz.id } }"
+                class="button-secondary"
+              >
                 Bearbeiten
               </RouterLink>
-              <button v-if="instanz.aktiv" type="button" class="danger" @click="zuDeaktivieren = instanz">
-                Deaktivieren
-              </button>
             </td>
           </tr>
           <tr v-if="store.items.length === 0">
-            <td colspan="5">Keine SVWS-Instanzen gefunden.</td>
+            <td colspan="10">Keine SVWS-Instanzen gefunden.</td>
           </tr>
         </tbody>
       </table>
@@ -103,18 +207,16 @@ async function bestaetigenDeaktivieren(): Promise<void> {
         Weiter
       </button>
     </nav>
-
-    <ConfirmDialog
-      :open="zuDeaktivieren !== null"
-      titel="SVWS-Instanz deaktivieren"
-      :nachricht="`Soll '${zuDeaktivieren?.name}' wirklich deaktiviert werden?`"
-      @confirm="bestaetigenDeaktivieren"
-      @cancel="zuDeaktivieren = null"
-    />
   </main>
 </template>
 
 <style scoped>
+/* Diese Ansicht hat mehr Spalten als die übrigen Listen und braucht daher mehr Breite als
+   der globale main-Rahmen (60rem, style.css) vorgibt. */
+main {
+  max-width: min(100%, 84rem);
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -138,30 +240,112 @@ async function bestaetigenDeaktivieren(): Promise<void> {
 
 .table-wrap {
   overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.table-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+
+.table-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.table-wrap::-webkit-scrollbar-thumb {
+  background-color: var(--line);
+  border-radius: 999px;
+}
+
+.table-wrap::-webkit-scrollbar-thumb:hover {
+  background-color: var(--accent);
 }
 
 table {
   width: 100%;
-  min-width: 40rem;
+  min-width: 50rem;
   border-collapse: collapse;
+  font-size: 0.9rem;
 }
 
 th,
 td {
   text-align: left;
-  padding: 0.5rem;
+  padding: 0.35rem 0.6rem;
   border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+  line-height: 1.3;
 }
 
-.aktionen {
+thead th {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-soft);
+  background: var(--surface-strong);
+}
+
+tbody tr:hover {
+  background: var(--surface-strong);
+}
+
+.beschreibung-zelle {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.checkbox-zelle {
+  width: 1%;
+  padding-right: 0;
+  text-align: center;
+}
+
+.id-zelle {
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8em;
+  color: var(--ink-soft);
+}
+
+.zelle-inline {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.btn-klein {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.85em;
+}
+
+.button-secondary {
+  display: inline-block;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button-secondary:hover {
+  border-color: var(--accent);
 }
 
 .status {
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .status-aktiv,
@@ -179,6 +363,11 @@ td {
 
 .status-unreachable {
   color: var(--error);
+}
+
+.hinweis-klein {
+  font-size: 0.85em;
+  color: var(--ink-soft);
 }
 
 .pagination {

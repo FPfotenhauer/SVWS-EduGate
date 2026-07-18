@@ -22,7 +22,7 @@ Gewählt wurde **Option 2** mit vier Zonen:
 | **Zone 1 – Verwaltungsnetz** | Control Plane, Admin-SPA, Keycloak, PostgreSQL | Nur internes RZ-/Admin-Netz. Wird niemals extern exponiert. |
 | **Zone 2 – Gateway-Zone** | Gateway-Service | Phase 1: nur aus dem internen Netz. Ausbaustufe: aus Zone 3. |
 | **Zone 3 – Extern (Ausbaustufe)** | Reverse Proxy / WAF | Initial nicht vorhanden; einziger Eintrittspunkt von außen, terminiert TLS 1.3 und leitet ausschließlich an Zone 2 weiter. |
-| **Zone 4 – SVWS-Zone** | SVWS-Instanzen + MariaDB je Schulträger | Nur erreichbar aus Zone 1 (Control Plane) und Zone 2 (Gateway), idealerweise per mTLS. Kein Weg von Zone 3/extern direkt in Zone 4. |
+| **Zone 4 – SVWS-Zone** | SVWS-Instanzen und deren MariaDB (mandantenübergreifende Betriebsressourcen, [ADR-011](./ADR-011-svws-instanz-als-geteilte-betriebsressource.md)) | Nur erreichbar aus Zone 1 (Control Plane) und Zone 2 (Gateway), idealerweise per mTLS. Kein Weg von Zone 3/extern direkt in Zone 4. |
 
 Verkehrsregeln (Whitelist-Prinzip, alles andere verboten):
 
@@ -46,6 +46,17 @@ TLS überall nach BSI TR-02102-2; interne Strecken (Zone 1/2 → Zone 4) mit mTL
 - Mehr Netz-Konfiguration bereits in der Entwicklung (mehrere Compose-Netze).
 - mTLS zu SVWS-Instanzen hängt von deren Zertifikatskonfiguration ab → bis dahin TLS + IP-Restriktion.
 
+## Nachtrag (SVWS-Serververwaltung): Präzisierung Zone 4
+
+Die ursprüngliche Formulierung „SVWS-Instanzen + MariaDB je Schulträger" für Zone 4 implizierte
+eine exklusive Zuordnung von SVWS-Instanzen zu einzelnen Schulträgern. Das widerspricht dem
+tatsächlichen Betriebsmodell: Eine SVWS-Instanz ist eine mandantenübergreifende
+Betriebsressource, die mehreren Schulträgern gleichzeitig dienen kann (siehe
+[ADR-011](./ADR-011-svws-instanz-als-geteilte-betriebsressource.md)). Für das Netzzonenkonzept
+selbst ändert sich dadurch nichts: Zone 4 bleibt unverändert die Zone der SVWS-Instanzen und
+ihrer MariaDB, unabhängig davon, wie viele Schulträger eine einzelne Instanz nutzen.
+
 ## Verweise
 
-- ADR-001 (Service-Schnitt), ADR-004 (Gateway), ARCHITECTURE.md Kap. 7 (Verteilungssicht)
+- ADR-001 (Service-Schnitt), ADR-004 (Gateway), ADR-011 (svws_instanz als geteilte
+  Betriebsressource), ARCHITECTURE.md Kap. 7 (Verteilungssicht)

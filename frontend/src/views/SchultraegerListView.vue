@@ -72,13 +72,15 @@ async function bestaetigenDeaktivieren(): Promise<void> {
                 {{ schultraeger.aktiv ? 'Aktiv' : 'Deaktiviert' }}
               </span>
             </td>
-            <td class="aktionen">
-              <RouterLink :to="{ name: 'schultraeger-bearbeiten', params: { id: schultraeger.id } }">
-                Bearbeiten
-              </RouterLink>
-              <button v-if="schultraeger.aktiv" type="button" class="danger" @click="zuDeaktivieren = schultraeger">
-                Deaktivieren
-              </button>
+            <td>
+              <div class="aktionen">
+                <RouterLink :to="{ name: 'schultraeger-bearbeiten', params: { id: schultraeger.id } }">
+                  Bearbeiten
+                </RouterLink>
+                <button v-if="schultraeger.aktiv" type="button" class="danger" @click="zuDeaktivieren = schultraeger">
+                  Deaktivieren
+                </button>
+              </div>
             </td>
           </tr>
           <tr v-if="store.items.length === 0">

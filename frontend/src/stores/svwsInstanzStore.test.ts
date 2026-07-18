@@ -13,9 +13,14 @@ const beispielInstanz: SvwsInstanz = {
   id: '22222222-2222-2222-2222-222222222222',
   name: 'Testinstanz',
   baseUrl: 'https://svws.example.org',
+  beschreibung: null,
   status: 'OK',
   aktiv: true,
   credentialsHinterlegt: false,
+  credentialsUpdatedAt: null,
+  lastConnectionTestAt: null,
+  lastConnectionTestSuccess: null,
+  lastConnectionTestMessage: null,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
 }
@@ -152,5 +157,41 @@ describe('svwsInstanzStore', () => {
     await store.fetchList({ page: 2, q: 'svws.example.org' })
 
     expect(listSpy).toHaveBeenCalledWith({ page: 2, size: 25, q: 'svws.example.org' }, expect.any(Function))
+  })
+
+  it('fetchList übernimmt den Statusfilter für den nächsten Aufruf', async () => {
+    const listSpy = vi
+      .spyOn(svwsInstanzApi, 'listSvwsInstanzen')
+      .mockResolvedValue({ items: [], page: 0, size: 25, totalElements: 0 })
+
+    const store = useSvwsInstanzStore()
+    await store.fetchList({ status: 'DEGRADED' })
+
+    expect(listSpy).toHaveBeenCalledWith({ page: 0, size: 25, status: 'DEGRADED' }, expect.any(Function))
+  })
+
+  it('testConnection ruft die API auf und aktualisiert den Eintrag in items', async () => {
+    const aktualisiert: SvwsInstanz = {
+      ...beispielInstanz,
+      status: 'OK',
+      lastConnectionTestSuccess: true,
+      lastConnectionTestAt: '2026-01-02T00:00:00Z',
+      lastConnectionTestMessage: 'Verbindung erfolgreich (Status 200).',
+    }
+    const testSpy = vi.spyOn(svwsInstanzApi, 'testSvwsInstanzConnection').mockResolvedValue(aktualisiert)
+    vi.spyOn(svwsInstanzApi, 'listSvwsInstanzen').mockResolvedValue({
+      items: [beispielInstanz],
+      page: 0,
+      size: 25,
+      totalElements: 1,
+    })
+
+    const store = useSvwsInstanzStore()
+    await store.fetchList()
+    const result = await store.testConnection(beispielInstanz.id)
+
+    expect(testSpy).toHaveBeenCalledWith(beispielInstanz.id, expect.any(Function))
+    expect(result).toEqual(aktualisiert)
+    expect(store.items[0]).toEqual(aktualisiert)
   })
 })

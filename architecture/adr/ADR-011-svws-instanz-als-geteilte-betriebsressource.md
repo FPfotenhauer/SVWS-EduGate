@@ -115,7 +115,12 @@ Gewählt wurde **Option 2**:
   dass eine Instanz mehreren Schulträgern über Schema-Zuordnungen dienen kann.
 - **ADR-002:** erhält einen Nachtrag, der `svws_instanz` analog zum bestehenden
   `audit_admin`-Nachtrag in ADR-008 von der generischen Tenant-Tabellen-Regel ausnimmt und auf
-  dieses ADR verweist.
+  dieses ADR verweist. Der einleitende Kontext-Satz („…auf einer SVWS-Instanz des
+  Schulträgers") wird korrigiert.
+- **ADR-007 (Netzzonenkonzept):** Die Zone-4-Tabellenzeile „SVWS-Instanzen + MariaDB je
+  Schulträger" implizierte dieselbe verworfene Exklusivität und wird korrigiert (Nachtrag in
+  ADR-007). Ursprünglich bei der Erstfassung dieses ADRs übersehen, nachgetragen bei der
+  Umsetzung der SVWS-Serververwaltung.
 
 ## Konsequenzen
 

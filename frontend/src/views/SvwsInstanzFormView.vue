@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useSvwsInstanzStore } from '@/stores/svwsInstanzStore'
 import { ApiError } from '@/types/problem'
 import type { InstanzStatus } from '@/types/svwsInstanz'
@@ -12,16 +13,27 @@ const store = useSvwsInstanzStore()
 
 const name = ref('')
 const baseUrl = ref('')
+const beschreibung = ref('')
 const status = ref<InstanzStatus>('OK')
 const aktiv = ref(true)
 const speichern = ref(false)
 const fehler = ref<string | null>(null)
 
+const credentialsHinterlegt = ref(false)
+const credentialsUpdatedAt = ref<string | null>(null)
 const credentialsUsername = ref('')
 const credentialsPassword = ref('')
 const credentialsSpeichern = ref(false)
 const credentialsFehler = ref<string | null>(null)
 const credentialsErfolg = ref(false)
+
+const lastConnectionTestAt = ref<string | null>(null)
+const lastConnectionTestSuccess = ref<boolean | null>(null)
+const lastConnectionTestMessage = ref<string | null>(null)
+const verbindungstestLaeuft = ref(false)
+const verbindungstestFehler = ref<string | null>(null)
+
+const zuDeaktivierenBestaetigen = ref(false)
 
 const bearbeitenModus = !!props.id
 
@@ -36,8 +48,14 @@ onMounted(async () => {
     const bestehender = await store.get(props.id)
     name.value = bestehender.name
     baseUrl.value = bestehender.baseUrl
+    beschreibung.value = bestehender.beschreibung ?? ''
     status.value = bestehender.status
     aktiv.value = bestehender.aktiv
+    credentialsHinterlegt.value = bestehender.credentialsHinterlegt
+    credentialsUpdatedAt.value = bestehender.credentialsUpdatedAt
+    lastConnectionTestAt.value = bestehender.lastConnectionTestAt
+    lastConnectionTestSuccess.value = bestehender.lastConnectionTestSuccess
+    lastConnectionTestMessage.value = bestehender.lastConnectionTestMessage
   }
 })
 
@@ -49,11 +67,12 @@ async function absenden(): Promise<void> {
       await store.update(props.id, {
         name: name.value,
         baseUrl: baseUrl.value,
+        beschreibung: beschreibung.value || undefined,
         status: status.value,
         aktiv: aktiv.value,
       })
     } else {
-      await store.create({ name: name.value, baseUrl: baseUrl.value })
+      await store.create({ name: name.value, baseUrl: baseUrl.value, beschreibung: beschreibung.value || undefined })
     }
     await router.push({ name: 'svws-instanz-liste' })
   } catch (error) {
@@ -73,12 +92,43 @@ async function credentialsAbsenden(): Promise<void> {
     credentialsUsername.value = ''
     credentialsPassword.value = ''
     credentialsErfolg.value = true
+    const aktualisiert = await store.get(props.id)
+    credentialsHinterlegt.value = aktualisiert.credentialsHinterlegt
+    credentialsUpdatedAt.value = aktualisiert.credentialsUpdatedAt
   } catch (error) {
     credentialsFehler.value =
       error instanceof ApiError ? error.message : 'Zugangsdaten konnten nicht gespeichert werden.'
   } finally {
     credentialsSpeichern.value = false
   }
+}
+
+async function verbindungstestStarten(): Promise<void> {
+  if (!props.id) return
+  verbindungstestFehler.value = null
+  verbindungstestLaeuft.value = true
+  try {
+    const aktualisiert = await store.testConnection(props.id)
+    status.value = aktualisiert.status
+    lastConnectionTestAt.value = aktualisiert.lastConnectionTestAt
+    lastConnectionTestSuccess.value = aktualisiert.lastConnectionTestSuccess
+    lastConnectionTestMessage.value = aktualisiert.lastConnectionTestMessage
+  } catch (error) {
+    verbindungstestFehler.value = error instanceof ApiError ? error.message : 'Verbindungstest fehlgeschlagen.'
+  } finally {
+    verbindungstestLaeuft.value = false
+  }
+}
+
+async function bestaetigenDeaktivieren(): Promise<void> {
+  if (!props.id) return
+  await store.deactivate(props.id)
+  zuDeaktivierenBestaetigen.value = false
+  await router.push({ name: 'svws-instanz-liste' })
+}
+
+function formatiereZeitpunkt(iso: string | null): string {
+  return iso ? new Date(iso).toLocaleString('de-DE') : '–'
 }
 </script>
 
@@ -90,13 +140,23 @@ async function credentialsAbsenden(): Promise<void> {
       <p v-if="fehler" role="alert" class="fehler">{{ fehler }}</p>
 
       <div class="feld">
-        <label for="name">Name</label>
+        <label for="name">Kurzbezeichnung</label>
         <input id="name" v-model="name" type="text" required />
       </div>
 
       <div class="feld">
         <label for="baseUrl">Base-URL</label>
         <input id="baseUrl" v-model="baseUrl" type="text" placeholder="https://svws.example.org" required />
+      </div>
+
+      <div class="feld">
+        <label for="beschreibung">Beschreibung (optional)</label>
+        <textarea
+          id="beschreibung"
+          v-model="beschreibung"
+          rows="3"
+          placeholder="Umgebung, Zweck, Besonderheiten …"
+        ></textarea>
       </div>
 
       <div v-if="bearbeitenModus" class="feld">
@@ -127,6 +187,11 @@ async function credentialsAbsenden(): Promise<void> {
         Gespeicherte Zugangsdaten werden aus Sicherheitsgründen nie angezeigt. Hier eingegebene Werte ersetzen die
         bisherigen Zugangsdaten vollständig.
       </p>
+      <p class="hinweis-status">
+        Status:
+        <strong>{{ credentialsHinterlegt ? 'Hinterlegt' : 'Nicht hinterlegt' }}</strong>
+        <span v-if="credentialsHinterlegt"> – zuletzt geändert: {{ formatiereZeitpunkt(credentialsUpdatedAt) }}</span>
+      </p>
 
       <form @submit.prevent="credentialsAbsenden">
         <p v-if="credentialsFehler" role="alert" class="fehler">{{ credentialsFehler }}</p>
@@ -153,6 +218,45 @@ async function credentialsAbsenden(): Promise<void> {
         </div>
       </form>
     </section>
+
+    <section v-if="bearbeitenModus" class="verbindungstest">
+      <h2>Verbindungstest</h2>
+      <p class="hinweis">Prüft die Erreichbarkeit der Base-URL mit den hinterlegten Zugangsdaten.</p>
+
+      <p v-if="verbindungstestFehler" role="alert" class="fehler">{{ verbindungstestFehler }}</p>
+      <p v-else-if="lastConnectionTestAt" role="status" :class="lastConnectionTestSuccess ? 'erfolg' : 'fehler'">
+        {{ lastConnectionTestSuccess ? 'Erfolgreich' : 'Fehlgeschlagen' }} am
+        {{ formatiereZeitpunkt(lastConnectionTestAt) }}
+        <span v-if="lastConnectionTestMessage">– {{ lastConnectionTestMessage }}</span>
+      </p>
+      <p v-else class="hinweis">Noch kein Verbindungstest durchgeführt.</p>
+
+      <button
+        type="button"
+        class="button-primary"
+        :disabled="!credentialsHinterlegt || verbindungstestLaeuft"
+        :title="credentialsHinterlegt ? '' : 'Keine Zugangsdaten hinterlegt'"
+        @click="verbindungstestStarten"
+      >
+        {{ verbindungstestLaeuft ? 'Teste …' : 'Verbindung testen' }}
+      </button>
+    </section>
+
+    <section v-if="bearbeitenModus && aktiv" class="gefahrenzone">
+      <h2>Instanz deaktivieren</h2>
+      <p class="hinweis">
+        Eine deaktivierte Instanz bleibt erhalten und kann über das Feld „Aktiv" oben wieder reaktiviert werden.
+      </p>
+      <button type="button" class="danger" @click="zuDeaktivierenBestaetigen = true">Deaktivieren</button>
+    </section>
+
+    <ConfirmDialog
+      :open="zuDeaktivierenBestaetigen"
+      titel="SVWS-Instanz deaktivieren"
+      :nachricht="`Soll '${name}' wirklich deaktiviert werden?`"
+      @confirm="bestaetigenDeaktivieren"
+      @cancel="zuDeaktivierenBestaetigen = false"
+    />
   </main>
 </template>
 
@@ -185,13 +289,16 @@ async function credentialsAbsenden(): Promise<void> {
   color: var(--accent);
 }
 
-.zugangsdaten {
+.zugangsdaten,
+.verbindungstest,
+.gefahrenzone {
   margin-top: 2.5rem;
   padding-top: 1.5rem;
   border-top: 1px solid var(--line);
 }
 
-.hinweis {
+.hinweis,
+.hinweis-status {
   color: var(--ink-soft);
   max-width: 36rem;
 }

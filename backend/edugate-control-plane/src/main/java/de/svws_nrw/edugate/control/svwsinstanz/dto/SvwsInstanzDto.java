@@ -12,9 +12,14 @@ public record SvwsInstanzDto(
     UUID id,
     String name,
     String baseUrl,
+    String beschreibung,
     InstanzStatus status,
     boolean aktiv,
     boolean credentialsHinterlegt,
+    Instant credentialsUpdatedAt,
+    Instant lastConnectionTestAt,
+    Boolean lastConnectionTestSuccess,
+    String lastConnectionTestMessage,
     Instant createdAt,
     Instant updatedAt
 ) {

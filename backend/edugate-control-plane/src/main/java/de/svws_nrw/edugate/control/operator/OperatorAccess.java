@@ -65,6 +65,9 @@ public class OperatorAccess {
                 if (e instanceof OperatorConflictException conflict) {
                     throw conflict;
                 }
+                if (e instanceof OperatorPreconditionException precondition) {
+                    throw precondition;
+                }
                 throw new OperatorAccessException("OperatorAccess-Operation fehlgeschlagen: " + action, e);
             }
         } catch (final SQLException e) {

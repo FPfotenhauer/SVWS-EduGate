@@ -103,6 +103,54 @@ Mindestens abzubilden sind:
   `TEST` sind Startwerte, aber Betreiber brauchen erweiterbare Werte wie `SCHULUNG`, `ABNAHME`,
   `MIGRATION`, `ARCHIV`, `DEMO` oder lokale Varianten.
 
+### Namenskonventionen für Schemata
+
+EduGate muss sinnvolle, betreiberfreundliche Namenskonventionen für SVWS-Schemata anbieten. Die
+Privileged API arbeitet mit technischen Schemanamen; diese Namen werden später in Massenverwaltung,
+Import/Export, Migration, Support und Fehleranalyse häufig verwendet. Sie dürfen daher nicht rein
+zufällig oder nur UI-intern entstehen.
+
+Grundlage der Standardkonvention ist die **Schulnummer**:
+
+- Eine Schule hat in der Regel eine sechsstellige Schulnummer, z. B. `123456`.
+- Ob es in Ausnahmefällen Schulen ohne Schulnummer geben kann, ist offen. Das Modell darf solche
+  Sonderfälle nicht unmöglich machen, muss sie aber explizit sichtbar behandeln.
+- Schemanamen werden nicht allein aus einem freien Anzeigenamen erzeugt.
+
+EduGate soll eine Standard-Namenskonvention vorschlagen, z. B.:
+
+```text
+svws_<schulnummer>_<umgebung>
+```
+
+Beispiele:
+
+```text
+svws_123456_prod
+svws_123456_test
+svws_123456_schulung
+```
+
+Die konkrete Konvention ist Betreiberkonfiguration, aber sie muss folgende Eigenschaften haben:
+
+- eindeutig pro `svws_instanz`
+- stabil über Import/Synchronisation hinweg
+- maschinenlesbar und sortierbar
+- kompatibel mit MariaDB-Schemanamen
+- ohne personenbezogene Daten
+- ohne interne Betreibergeheimnisse
+- erklärbar in Exporten und Betriebsdokumentation
+
+Für Schulen ohne belastbare Schulnummer braucht es einen Sonderpfad:
+
+- explizit vergebener technischer Schlüssel statt stillschweigender Ableitung
+- sichtbare Warnung/Markierung in der UI
+- Audit-Eintrag bei Vergabe oder Änderung
+- keine automatische Vermutung aus Schulname oder Freitext
+
+Die Implementierung darf mit einer einfachen Standardkonvention starten, muss aber so geschnitten
+sein, dass Betreiber die Konvention später konfigurieren oder durch Regeln erweitern können.
+
 ### Umgebung und Status
 
 `umgebung` beschreibt den fachlichen Zweck des Datenbestands. Sie ist nicht identisch mit dem
@@ -166,9 +214,49 @@ Credentials werden getrennt betrachtet:
 - Spätere schema- oder schulbezogene Credentials für Gateway-Zugriffe sind ein eigener
   Credential-Typ und dürfen nicht mit den privilegierten Instanz-Credentials vermischt werden.
 
+Beim Anlegen, Migrieren oder Einspielen eines Backups über die Privileged API müssen in der Regel
+MariaDB-Benutzername und MariaDB-Passwort für das betroffene Schema erzeugt oder gesetzt werden.
+Auch dafür braucht EduGate Konventionen:
+
+- Benutzername aus stabilen technischen Bestandteilen ableiten, z. B. Schulnummer, Umgebung und
+  ggf. kurzer Betreiber-/Instanzpräfix.
+- Benutzername eindeutig pro SVWS-Server/MariaDB-Kontext halten.
+- Passwort immer kryptografisch zufällig erzeugen; keine Ableitung aus Schulnummer,
+  Schemaname oder Umgebung.
+- Credential-Metadaten getrennt vom geheimen Wert speichern: Zweck, Umgebung, Schema, erzeugt am,
+  erzeugt von, letzter Export, letzter Test, ggf. Rotationserfordernis.
+- Credentials dürfen ersetzbar und später rotierbar sein, ohne das fachliche Schema-Objekt neu
+  anzulegen.
+
+Auch hier gilt: EduGate bietet eine sichere Standardkonvention, erzwingt aber keine zu enge
+Betreiberrealität. Viele Dienstleister werden bestehende Namensmuster oder Safe-Strukturen haben.
+
 Credentials erscheinen niemals im Frontend, in API-Antworten, Logs oder Audit-Details im Klartext.
 Massenverwaltung von Credentials muss später über Import, Vorschau, Validierung und sichere
 Fehlerberichte erfolgen, nicht über manuelles Einzelabtippen.
+
+### Credential-Verwaltung und Export
+
+EduGate ist nicht der einzige Ort, an dem Betreiber Zugangsdaten verwalten müssen. Dienstleister
+brauchen oft einen externen Safe, ein Passwortmanagement-System oder ein separates
+Betriebshandbuch. Deshalb muss EduGate einen sicheren Exportpfad vorsehen.
+
+Grundregeln:
+
+- Klartext-Credential-Export nur als explizite, auditierte Aktion.
+- Kein automatischer Export bei jeder Änderung.
+- Export nur für berechtigte Dienstleister-Admins.
+- Exportdateien müssen ein klar dokumentiertes Format haben, z. B. CSV oder JSON.
+- Export muss für externe Safes nutzbar sein: Schema, Schule, Schulnummer, Umgebung,
+  SVWS-Instanz, Benutzername, Passwort, Erzeugungszeitpunkt, Zweck.
+- Export darf keine unnötigen personenbezogenen Daten enthalten.
+- Nach Möglichkeit Export verschlüsselt oder mindestens mit klarer Warnung und kurzem
+  Download-Zeitfenster.
+- Jeder Export wird auditiert, aber ohne Passwortwerte im Audit.
+
+Spätere Integrationen mit einem echten Passwort-Safe oder Secret-Manager bleiben möglich. Der
+erste Schritt darf ein manuell herunterladbarer Export sein, solange er bewusst, geschützt und
+auditierbar ist.
 
 ### Massenverwaltung
 
@@ -182,6 +270,7 @@ Die Schemaverwaltung muss von Beginn an für große Betreiberumgebungen vorberei
 - Batch-Validierung
 - Batch-Verbindungstest bzw. Statusabgleich
 - exportierbare Fehlerlisten ohne Secrets
+- Massenexport von Credential-Daten für externe Safes als explizite, auditierte Aktion
 
 Eine vollständige Bulk-Import-Implementierung ist nicht zwingend Teil des ersten
 Schemaverwaltungs-Auftrags. Datenmodell, Service-Schnitt und UI-Architektur dürfen diese
@@ -208,6 +297,7 @@ Sicherheitsrelevante Operationen sind auditpflichtig, insbesondere:
 - Migration starten
 - Import/Export starten
 - Credential-Zuordnung oder Credential-Änderung
+- Credential-Export
 - fehlgeschlagene gefährliche Operationen
 
 Gefährliche Operationen wie Löschen, Migration, Import/Restore und Deaktivieren benötigen
@@ -223,6 +313,8 @@ explizite Bestätigung und dürfen nicht als beiläufige Listenaktion umgesetzt 
 - Die spätere Gateway-Logik erhält eine klare Routing-Kette: Tenant/Schule/Schema/Instanz.
 - Betreiber können später große Bestände über Sync-/Import-Workflows verwalten, ohne jedes Schema
   oder Credential einzeln erfassen zu müssen.
+- Standardisierte Schema- und Credential-Namen erleichtern Betrieb, Support, Massenimport,
+  Migration und externe Safe-Ablage.
 - Die historisch gewachsene SVWS-Privileged-API wird gekapselt statt direkt in die EduGate-UI
   durchgereicht.
 
@@ -232,8 +324,12 @@ explizite Bestätigung und dürfen nicht als beiläufige Listenaktion umgesetzt 
 - Unzugeordnete Sync-Funde brauchen einen eigenen Workflow, sonst entsteht Risiko falscher
   Mandantenzuordnung.
 - Erweiterbare Umgebungen erhöhen UI- und Validierungsaufwand gegenüber einem kleinen festen Enum.
+- Namenskonventionen können lokale Betreiberrealitäten nie vollständig vorwegnehmen; die
+  Standardkonvention muss daher konfigurierbar bleiben.
 - Bulk-Import und Batch-Validierung müssen sorgfältig gebaut werden, damit keine
   mandantenübergreifenden Zuordnungsfehler entstehen.
+- Credential-Export ist betrieblich nötig, erhöht aber das Risiko unbeabsichtigter Offenlegung und
+  braucht klare Berechtigungen, Warnungen, kurze Download-Zeitfenster und Audit.
 - Gefährliche Privileged-API-Operationen erfordern zusätzliche Schutzmechanismen und Tests.
 
 ## Verweise

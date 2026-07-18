@@ -29,7 +29,7 @@ public class SchultraegerService {
     private static final String POSTGRES_UNIQUE_VIOLATION = "23505";
 
     private static final String SELECT_COLUMNS =
-        "id, name, traegernummer, aktiv, created_at, updated_at";
+        "id, name, traegernummer, strasse, plz, ort, beschreibung, aktiv, created_at, updated_at";
 
     @Inject
     OperatorAccess operatorAccess;
@@ -75,10 +75,15 @@ public class SchultraegerService {
 
     public SchultraegerDto create(final String adminSubject, final SchultraegerCreateRequest request) {
         return operatorAccess.execute(adminSubject, AuditAction.SCHULTRAEGER_CREATE, "schultraeger", connection -> {
-            final String sql = "INSERT INTO schultraeger (name, traegernummer) VALUES (?, ?) RETURNING " + SELECT_COLUMNS;
+            final String sql = "INSERT INTO schultraeger (name, traegernummer, strasse, plz, ort, beschreibung) "
+                + "VALUES (?, ?, ?, ?, ?, ?) RETURNING " + SELECT_COLUMNS;
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setString(1, request.name());
                 statement.setString(2, request.traegernummer());
+                statement.setString(3, request.strasse());
+                statement.setString(4, request.plz());
+                statement.setString(5, request.ort());
+                statement.setString(6, request.beschreibung());
                 try (ResultSet resultSet = statement.executeQuery()) {
                     resultSet.next();
                     final SchultraegerDto dto = toDto(resultSet);
@@ -103,12 +108,16 @@ public class SchultraegerService {
 
     public SchultraegerDto update(final String adminSubject, final UUID id, final SchultraegerUpdateRequest request) {
         return operatorAccess.execute(adminSubject, AuditAction.SCHULTRAEGER_UPDATE, "schultraeger", connection -> {
-            final String sql = "UPDATE schultraeger SET name = ?, traegernummer = ?, updated_at = now() "
-                + "WHERE id = ? RETURNING " + SELECT_COLUMNS;
+            final String sql = "UPDATE schultraeger SET name = ?, traegernummer = ?, strasse = ?, plz = ?, ort = ?, "
+                + "beschreibung = ?, updated_at = now() WHERE id = ? RETURNING " + SELECT_COLUMNS;
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setString(1, request.name());
                 statement.setString(2, request.traegernummer());
-                statement.setObject(3, id);
+                statement.setString(3, request.strasse());
+                statement.setString(4, request.plz());
+                statement.setString(5, request.ort());
+                statement.setString(6, request.beschreibung());
+                statement.setObject(7, id);
                 try (ResultSet resultSet = statement.executeQuery()) {
                     if (!resultSet.next()) {
                         throw new OperatorNotFoundException("Schulträger '" + id + "' wurde nicht gefunden.");
@@ -161,6 +170,10 @@ public class SchultraegerService {
             (UUID) resultSet.getObject("id"),
             resultSet.getString("name"),
             resultSet.getString("traegernummer"),
+            resultSet.getString("strasse"),
+            resultSet.getString("plz"),
+            resultSet.getString("ort"),
+            resultSet.getString("beschreibung"),
             resultSet.getBoolean("aktiv"),
             resultSet.getTimestamp("created_at").toInstant(),
             resultSet.getTimestamp("updated_at").toInstant());

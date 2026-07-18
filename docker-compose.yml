@@ -76,6 +76,13 @@ services:
       EDUGATE_MASTER_KEY: ${EDUGATE_MASTER_KEY}
       EDUGATE_OIDC_AUTH_SERVER_URL: http://keycloak:8080/realms/edugate
       EDUGATE_FRONTEND_ORIGIN: http://localhost:5173
+      # Nur lokale Entwicklung mit selbstsignierten Test-SVWS-Instanzen (siehe
+      # docs/entwicklung/svws-server-api.md und DevTrustStoreSslContext). Leer/unset in
+      # Produktion - dann gilt die Standard-JVM-Vertrauenskette.
+      EDUGATE_SVWS_DEV_TRUSTSTORE_PATH: ${EDUGATE_SVWS_DEV_TRUSTSTORE_PATH:-}
+      EDUGATE_SVWS_DEV_TRUSTSTORE_PASSWORD: ${EDUGATE_SVWS_DEV_TRUSTSTORE_PASSWORD:-}
+    volumes:
+      - ./docker/dev-truststore:/dev-truststore:ro
     ports:
       - "8080:8080"
     networks:

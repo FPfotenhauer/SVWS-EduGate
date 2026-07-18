@@ -4,6 +4,7 @@ import { useAuthStore } from '@/auth/authStore'
 import * as svwsInstanzApi from '@/api/svwsInstanzApi'
 import { ApiError } from '@/types/problem'
 import type {
+  InstanzStatus,
   SvwsInstanz,
   SvwsInstanzCreateFormData,
   SvwsInstanzCredentialsFormData,
@@ -16,6 +17,7 @@ export const useSvwsInstanzStore = defineStore('svwsInstanz', () => {
   const size = ref(25)
   const totalElements = ref(0)
   const query = ref('')
+  const statusFilter = ref<InstanzStatus | ''>('')
   const loading = ref(false)
   const errorMessage = ref<string | null>(null)
 
@@ -23,15 +25,16 @@ export const useSvwsInstanzStore = defineStore('svwsInstanz', () => {
     return useAuthStore().accessToken
   }
 
-  async function fetchList(options: { page?: number; q?: string } = {}): Promise<void> {
+  async function fetchList(options: { page?: number; q?: string; status?: InstanzStatus | '' } = {}): Promise<void> {
     loading.value = true
     errorMessage.value = null
     if (options.page !== undefined) page.value = options.page
     if (options.q !== undefined) query.value = options.q
+    if (options.status !== undefined) statusFilter.value = options.status
 
     try {
       const result = await svwsInstanzApi.listSvwsInstanzen(
-        { page: page.value, size: size.value, q: query.value || undefined },
+        { page: page.value, size: size.value, q: query.value || undefined, status: statusFilter.value || undefined },
         accessToken,
       )
       items.value = result.items
@@ -70,12 +73,22 @@ export const useSvwsInstanzStore = defineStore('svwsInstanz', () => {
     return svwsInstanzApi.getSvwsInstanz(id, accessToken)
   }
 
+  async function testConnection(id: string): Promise<SvwsInstanz> {
+    const updated = await svwsInstanzApi.testSvwsInstanzConnection(id, accessToken)
+    const index = items.value.findIndex((item) => item.id === id)
+    if (index !== -1) {
+      items.value[index] = updated
+    }
+    return updated
+  }
+
   return {
     items,
     page,
     size,
     totalElements,
     query,
+    statusFilter,
     loading,
     errorMessage,
     fetchList,
@@ -84,6 +97,7 @@ export const useSvwsInstanzStore = defineStore('svwsInstanz', () => {
     setCredentials,
     deactivate,
     get,
+    testConnection,
   }
 })
 

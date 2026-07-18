@@ -12,6 +12,12 @@ Mandantenhierarchie ermöglichen:
 - **SVWS-Instanzen** anlegen, Zugangsdaten hinterlegen, Status prüfen, deaktivieren – als
   geteilte Betriebsressource, die mehreren Schulträgern gleichzeitig dienen kann (siehe
   [ADR-011](../../architecture/adr/ADR-011-svws-instanz-als-geteilte-betriebsressource.md)).
+  Kurzbezeichnung und Base-URL sind eindeutig; eine optionale Beschreibung dient als
+  Freitext-Betreiberhinweis. Ein Verbindungstest aktualisiert Erreichbarkeitsstatus, Zeitpunkt
+  und eine sichere Ergebnis-Meldung – niemals die Zugangsdaten selbst. Sind Zugangsdaten
+  hinterlegt, prüft er Erreichbarkeit **und** Gültigkeit/Rechte der Zugangsdaten (Status `OK`
+  bei Erfolg); ohne Zugangsdaten prüft er nur die reine Erreichbarkeit (Status `DEGRADED` bei
+  Erfolg, da die Zugangsdaten dabei nicht geprüft werden).
 - **Schemas** je Schule und Umgebung (Produktiv, Test) einsehen und den passenden
   SVWS-Instanzen zuordnen.
 

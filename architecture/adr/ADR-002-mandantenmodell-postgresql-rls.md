@@ -6,7 +6,7 @@
 
 ## Kontext und Problemstellung
 
-Die Mandantenhierarchie lautet: **Dienstleister → Schulträger → Schule → Schema**. Ein Schulträger kann mehrere hundert Schulen umfassen; jede Schule besitzt ein oder mehrere MariaDB-Schemas (Produktiv, Test) auf einer SVWS-Instanz des Schulträgers. Mandantentrennung ist Qualitätsziel Nr. 2: Kein Request darf Daten eines fremden Schulträgers liefern – auch nicht bei einem Programmierfehler in einer Query.
+Die Mandantenhierarchie lautet: **Dienstleister → Schulträger → Schule → Schema**. Ein Schulträger kann mehrere hundert Schulen umfassen; jede Schule besitzt ein oder mehrere MariaDB-Schemas (Produktiv, Test) auf einer SVWS-Instanz (siehe [ADR-011](./ADR-011-svws-instanz-als-geteilte-betriebsressource.md): mandantenübergreifende Betriebsressource, nicht exklusiv einem Schulträger zugeordnet). Mandantentrennung ist Qualitätsziel Nr. 2: Kein Request darf Daten eines fremden Schulträgers liefern – auch nicht bei einem Programmierfehler in einer Query.
 
 ## Betrachtete Optionen
 
@@ -55,6 +55,10 @@ tenant-gebundene Standardrolle). Details, Begründung und die präzisierte Prüf
 RLS-Wächter-Test stehen in [ADR-011](./ADR-011-svws-instanz-als-geteilte-betriebsressource.md).
 Diese Tabelle bleibt (unverändert seit V1) `schule` und `schema` als tatsächlich
 mandantengebundene Fachtabellen im Sinne dieses ADRs.
+
+Die einleitende Formulierung im „Kontext und Problemstellung“ oben ("…auf einer SVWS-Instanz")
+wurde entsprechend korrigiert; sie beschrieb ursprünglich eine SVWS-Instanz fälschlich als dem
+Schulträger zugehörig.
 
 ## Verweise
 

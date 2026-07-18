@@ -8,6 +8,10 @@ public record SchultraegerDto(
     UUID id,
     String name,
     String traegernummer,
+    String strasse,
+    String plz,
+    String ort,
+    String beschreibung,
     boolean aktiv,
     Instant createdAt,
     Instant updatedAt

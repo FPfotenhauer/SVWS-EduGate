@@ -99,6 +99,59 @@ class SchultraegerResourceTest {
 
     @Test
     @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void adressfelderUndBeschreibungWerdenGespeichertUndKoennenAktualisiertWerden() {
+        final String traegernummer = "ADR-" + UUID.randomUUID();
+        final String createBody = "{\"name\": \"Musterstadt\", \"traegernummer\": \"" + traegernummer + "\", "
+            + "\"strasse\": \"Hauptstraße 1\", \"plz\": \"12345\", \"ort\": \"Musterstadt\", "
+            + "\"beschreibung\": \"Testträger\"}";
+
+        final String id = given()
+            .contentType(ContentType.JSON)
+            .body(createBody)
+            .when().post(PATH)
+            .then()
+            .statusCode(201)
+            .body("strasse", equalTo("Hauptstraße 1"))
+            .body("plz", equalTo("12345"))
+            .body("ort", equalTo("Musterstadt"))
+            .body("beschreibung", equalTo("Testträger"))
+            .extract().path("id");
+
+        final String updateBody = "{\"name\": \"Musterstadt\", \"traegernummer\": \"" + traegernummer + "\", "
+            + "\"strasse\": \"Nebenstraße 2\", \"plz\": \"54321\", \"ort\": \"Anderestadt\", "
+            + "\"beschreibung\": \"Geändert\"}";
+        given()
+            .contentType(ContentType.JSON)
+            .body(updateBody)
+            .when().put(PATH + "/" + id)
+            .then()
+            .statusCode(200)
+            .body("strasse", equalTo("Nebenstraße 2"))
+            .body("plz", equalTo("54321"))
+            .body("ort", equalTo("Anderestadt"))
+            .body("beschreibung", equalTo("Geändert"));
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void adressfelderSindOptional() {
+        final String traegernummer = "OPT-" + UUID.randomUUID();
+        final String createBody = "{\"name\": \"Musterstadt\", \"traegernummer\": \"" + traegernummer + "\"}";
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(createBody)
+            .when().post(PATH)
+            .then()
+            .statusCode(201)
+            .body("strasse", equalTo(null))
+            .body("plz", equalTo(null))
+            .body("ort", equalTo(null))
+            .body("beschreibung", equalTo(null));
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
     void leererNameErgibt400() {
         final String body = "{\"name\": \"\", \"traegernummer\": \"T-" + UUID.randomUUID() + "\"}";
 

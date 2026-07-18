@@ -12,6 +12,14 @@ Vor einer nicht trivialen Änderung lohnt sich ein Blick in Kapitel 4
 („Lösungsstrategie“, ADR-Übersicht je Problem) und Kapitel 12 („Glossar“) der
 `ARCHITECTURE.md`.
 
+## Die API des SVWS-Servers
+
+Wer sich mit der API des SVWS-Servers (des externen Systems, das EduGate verwaltet) befassen
+muss – Server-API, Privileged-/Root-API oder die künftige External-API – findet Struktur,
+Auth-Modell und Hintergrundwissen dazu in
+[`svws-server-api.md`](./svws-server-api.md). Die zugehörigen OpenAPI-Beschreibungen liegen
+unter [`examples/`](../../examples/).
+
 ## Regel: architekturrelevante Änderungen brauchen ein ADR
 
 Einmal getroffene Architekturentscheidungen werden nicht nachträglich verändert. Eine
@@ -58,6 +66,7 @@ frontend/                 Vue 3, TypeScript, Vite, Pinia (Admin-SPA)
 architecture/              ARCHITECTURE.md und ADRs
 compliance/                Sicherheits- und Compliance-Dokumentation
 docs/                      diese nutzerorientierte Dokumentation
+examples/                  OpenAPI-Beschreibungen des SVWS-Servers (siehe svws-server-api.md)
 docker/, docker-compose.yml  lokale Entwicklungsumgebung
 ```
 

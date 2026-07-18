@@ -17,6 +17,7 @@ Dieser Ordner enthält alle Architecture Decision Records für SVWS-EduGate im [
 | [ADR-009](./ADR-009-operator-zugriff-und-audit.md) | Operator-Zugriff und Audit-Modell für Admin-Operationen | accepted |
 | [ADR-010](./ADR-010-einheitliches-design-system.md) | Einheitliches Design-System für SVWS-Apps (Emerald) | accepted |
 | [ADR-011](./ADR-011-svws-instanz-als-geteilte-betriebsressource.md) | SVWS-Instanz als geteilte, mandantenübergreifende Betriebsressource | accepted |
+| [ADR-012](./ADR-012-schemaverwaltung-und-schuldatenbanken.md) | Schemaverwaltung und Schuldatenbanken | accepted |
 
 ## Neues ADR anlegen
 

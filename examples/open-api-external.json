@@ -1,0 +1,679 @@
+{
+  "openapi" : "3.0.1",
+  "info" : {
+    "title" : "SVWS Open-API Extern",
+    "description" : "Die Open-API-Schnittstellenbeschreibungen für extern bereitgestellte API Endpunkte des SVWS-Servers.",
+    "license" : {
+      "name" : "Apache 2.0",
+      "url" : "https://www.apache.org/licenses/LICENSE-2.0.html"
+    },
+    "version" : "1.5.0-SNAPSHOT"
+  },
+  "security" : [ {
+    "basicAuth" : [ ]
+  } ],
+  "paths" : {
+    "/api/external/{schema}/v1/lernplattformen" : {
+      "get" : {
+        "tags" : [ "External" ],
+        "summary" : "Gibt eine Übersicht aller schulspezifischen Lernplattformen zurück.",
+        "description" : "Erstellt eine Liste aller vorhandenen Lernplattformen, insofer die notwendige Berechtigung vorliegen.",
+        "operationId" : "getLernplattformen",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Eine Liste von Lernplattformen",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/LernplattformV1"
+                  }
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Der SVWS-Benutzer hat keine Rechte, um Lernplattformen anzusehen."
+          },
+          "404" : {
+            "description" : "Keine Lernplattformen gefunden"
+          }
+        }
+      }
+    },
+    "/api/external/{schema}/v1/lernplattformen/{idLernplattform}/{idSchuljahresabschnitt}" : {
+      "get" : {
+        "tags" : [ "External" ],
+        "summary" : "Liefert einen Datenexport aller relevanten Informationen zum angefragten Schuljahresabschnitt für die angegebene Lernplattform.",
+        "description" : "Es werden alle relevanten Daten zu Jahrgängen, Klassen, Lehrern, Schülern, Fächern und Lerngruppen aus der SVWS-DB geladen und für den Export bezogen auf eine Lernplattform aufbereitet und zurückgegeben.",
+        "operationId" : "getLernplattformenExport",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        }, {
+          "name" : "idLernplattform",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "idSchuljahresabschnitt",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Die Daten für den Lernplattformen Datenexport",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/LernplattformV1Export"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Der SVWS-Benutzer hat keine Rechte, um einen Lernplattformen Datenexport anzufordern."
+          },
+          "404" : {
+            "description" : "Es wurden nicht alle benötigten Ressourcen gefunden."
+          }
+        }
+      }
+    },
+    "/api/external/{schema}/v1/lernplattformen/{idLernplattform}/{idSchuljahresabschnitt}/gzip" : {
+      "get" : {
+        "tags" : [ "External" ],
+        "summary" : "Liefert einen im gzip-Format komprimierten Datenexport aller relevanten Informationen zum angefragten Schuljahresabschnitt für die angegebene Lernplattform.",
+        "description" : "Es werden alle relevanten Daten zu Jahrgängen, Klassen, Lehrern, Schülern, Fächern und Lerngruppen aus der SVWS-DB geladen und für den Export bezogen auf eine Lernplattform aufbereitet und komprimiert im gzip-Format zurückgegeben.",
+        "operationId" : "getLernplattformenExportAsGzip",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        }, {
+          "name" : "idLernplattform",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "idSchuljahresabschnitt",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Die Daten für den Lernplattformen Datenexport",
+            "content" : {
+              "application/octet-stream" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "binary"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Der SVWS-Benutzer hat keine Rechte, um einen Lernplattformen Datenexport anzufordern."
+          },
+          "404" : {
+            "description" : "Es wurden nicht alle benötigten Ressourcen gefunden."
+          }
+        }
+      }
+    },
+    "/api/external/{schema}/v1/schuljahresabschnitte" : {
+      "get" : {
+        "tags" : [ "External" ],
+        "summary" : "Gibt eine Liste aller verfügbaren Schuljahresabschnitte zurück.",
+        "description" : "Erstellt eine Liste aller vorhandenen Schuljahresabschnitte, insofern die notwendige Berechtigung vorliegt.",
+        "operationId" : "getSchuljahresabschnitte",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Eine Liste von Schuljahresabschnitten",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/SchuljahresabschnittV1"
+                  }
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Der SVWS-Benutzer hat keine Rechte, um Schuljahresabschnitte anzusehen."
+          },
+          "500" : {
+            "description" : "Unspezifizierter Fehler (z. B. beim Datenbankzugriff)"
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "LernplattformV1" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "description" : "Die ID einer Lernplattform",
+            "format" : "int64",
+            "readOnly" : true,
+            "example" : 42
+          },
+          "bezeichnung" : {
+            "type" : "string",
+            "description" : "Die Bezeichnung einer Lernplattform",
+            "nullable" : true,
+            "readOnly" : true,
+            "example" : "Lernplattform"
+          }
+        },
+        "description" : "Datenstruktur für die Übermittlung/Export der ID und Bezeichnung einer Lernplattform.",
+        "nullable" : true
+      },
+      "LernplattformV1Export" : {
+        "required" : [ "faecher", "jahrgaenge", "klassen", "lehrer", "lerngruppen", "schueler" ],
+        "type" : "object",
+        "properties" : {
+          "revision" : {
+            "type" : "integer",
+            "description" : "Die Revisionsnummer des Rückgabeformates der Daten.",
+            "format" : "int32",
+            "example" : 1
+          },
+          "idLernplattform" : {
+            "type" : "integer",
+            "description" : "Enthält die ID der Lernplattform.",
+            "format" : "int64",
+            "nullable" : true,
+            "example" : 1
+          },
+          "lernplattformBezeichnung" : {
+            "type" : "string",
+            "description" : "Enthält die Bezeichnung der Lernplattform.",
+            "nullable" : true,
+            "example" : "Iserv"
+          },
+          "titel" : {
+            "type" : "string",
+            "description" : "Der Titel des Inhalts.",
+            "nullable" : true,
+            "example" : "LernplattformenExport.json"
+          },
+          "beschreibung" : {
+            "type" : "string",
+            "description" : "Beschreibung für den Inhalt der Daten",
+            "nullable" : true,
+            "example" : "Diese JSON stellt Daten für ein internes Update der Lernplattformen bereit."
+          },
+          "autor" : {
+            "type" : "string",
+            "description" : "Autor der generierten Daten",
+            "nullable" : true,
+            "example" : "MSB SVWS"
+          },
+          "anfrageZeitpunkt" : {
+            "type" : "string",
+            "description" : "Zeitpunkt, an dem die Anfrage gestellt wurde",
+            "nullable" : true,
+            "example" : "2013-11-14 13:12:48.774"
+          },
+          "antwortZeitpunkt" : {
+            "type" : "string",
+            "description" : "Zeitpunkt, an dem die Antwort zurückgeschickt wurde",
+            "nullable" : true,
+            "example" : "2013-11-14 13:12:48.774"
+          },
+          "schulnummer" : {
+            "type" : "integer",
+            "description" : "Nummer der Schule",
+            "format" : "int64",
+            "example" : 100815
+          },
+          "schuljahr" : {
+            "type" : "integer",
+            "description" : "Schuljahr",
+            "format" : "int32",
+            "example" : 2025
+          },
+          "idSchuljahresabschnitt" : {
+            "type" : "integer",
+            "description" : "ID des Schuljahresabschnitts",
+            "format" : "int64",
+            "example" : 2
+          },
+          "schulbezeichnung" : {
+            "type" : "string",
+            "description" : "Vollständiger Name der Schule",
+            "nullable" : true,
+            "example" : "Albert Zweistein Gymnasium Städt. Gymnasium für Jungen und Mädchen - Sekundarstufen I und II -"
+          },
+          "mailadresse" : {
+            "type" : "string",
+            "description" : "Kontakt E-Mail-Adresse der Schule",
+            "nullable" : true,
+            "example" : "schule@mail.de"
+          },
+          "jahrgaenge" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LernplattformV1Jahrgang"
+            }
+          },
+          "klassen" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LernplattformV1Klasse"
+            }
+          },
+          "lehrer" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LernplattformV1Lehrer"
+            }
+          },
+          "faecher" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LernplattformV1Fach"
+            }
+          },
+          "lerngruppen" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LernplattformV1Lerngruppe"
+            }
+          },
+          "schueler" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LernplattformV1Schueler"
+            }
+          }
+        },
+        "description" : "Datenstruktur für die Übermittlung/Export von Lernplattform Informationen.",
+        "nullable" : true
+      },
+      "LernplattformV1Fach" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "description" : "Die ID des Faches in der SVWS-DB.",
+            "format" : "int64",
+            "example" : 42
+          },
+          "kuerzel" : {
+            "type" : "string",
+            "description" : "Das Kürzel des Faches, wie es im Rahmen der amtlichen Schulstatistik verwendet wird.",
+            "nullable" : true,
+            "example" : "D"
+          },
+          "kuerzelAnzeige" : {
+            "type" : "string",
+            "description" : "Das Kürzel des Faches, wie es im Rahmen der Schule benannt wird und angezeigt werden soll.",
+            "nullable" : true,
+            "example" : "D"
+          },
+          "istFremdsprache" : {
+            "type" : "boolean",
+            "description" : "Gibt an, ob es sich bei dem Fach um eine Fremdsprache handelt oder nicht.",
+            "example" : false
+          }
+        },
+        "description" : "Spezifiziert die Datenstruktur eines Fachs, innerhalb des Exports einer Lernplattform."
+      },
+      "LernplattformV1Jahrgang" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "description" : "Die ID des Jahrgangs aus der SVWS-DB.",
+            "format" : "int64",
+            "example" : 12
+          },
+          "kuerzel" : {
+            "type" : "string",
+            "description" : "Das Kürzel des Jahrgangs, wie es im Rahmen der amtlichen Schulstatistik verwendet wird.",
+            "nullable" : true,
+            "example" : "EFA"
+          },
+          "kuerzelAnzeige" : {
+            "type" : "string",
+            "description" : "Das Kürzel der Jahrgangs, wie er im Rahmen der Schule benannt wird und angezeigt werden soll.",
+            "nullable" : true,
+            "example" : "EF"
+          },
+          "bezeichnung" : {
+            "type" : "string",
+            "description" : "Die Bezeichnung des Jahrgangs, welche bei der amtlichen Statistik verwendet wird.",
+            "nullable" : true,
+            "example" : "EF"
+          }
+        },
+        "description" : "Spezifiziert die Datenstruktur eines Jahrgangs, innerhalb des Exports einer Lernplattform."
+      },
+      "LernplattformV1Klasse" : {
+        "required" : [ "idsKlassenlehrer" ],
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "description" : "Die ID der Klasse aus der SVWS-DB.",
+            "format" : "int64",
+            "example" : 12
+          },
+          "kuerzel" : {
+            "type" : "string",
+            "description" : "Das Kürzel der Klasse, wie es im Rahmen der amtlichen Schulstatistik verwendet wird.",
+            "nullable" : true,
+            "example" : "EFA"
+          },
+          "kuerzelAnzeige" : {
+            "type" : "string",
+            "description" : "Das Kürzel der Klasse, wie es im Rahmen der Schule benannt wird und angezeigt werden soll.",
+            "nullable" : true,
+            "example" : "EF"
+          },
+          "idJahrgang" : {
+            "type" : "integer",
+            "description" : "Die ID des Jahrgangs aus der SVWS-DB zu der die Klasse gehört. Bei einer jahrgangsübergreifenden Klasse ist der Wert null.",
+            "format" : "int64",
+            "nullable" : true,
+            "example" : 11
+          },
+          "idsKlassenlehrer" : {
+            "type" : "array",
+            "items" : {
+              "type" : "integer",
+              "format" : "int64"
+            }
+          }
+        },
+        "description" : "Spezifiziert die Datenstruktur einer Klasse, innerhalb des Exports einer Lernplattform."
+      },
+      "LernplattformV1Lehrer" : {
+        "required" : [ "lernplattformlogin" ],
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "description" : "Die ID des Lehrers aus der SVWS-DB",
+            "format" : "int64",
+            "example" : 42
+          },
+          "kuerzel" : {
+            "type" : "string",
+            "description" : "Das Kürzel des Lehrers",
+            "nullable" : true,
+            "example" : "MUS"
+          },
+          "nachname" : {
+            "type" : "string",
+            "description" : "Der Nachname des Lehrers.",
+            "nullable" : true,
+            "example" : "Mustermann"
+          },
+          "vorname" : {
+            "type" : "string",
+            "description" : "Der Vorname des Lehrers.",
+            "nullable" : true,
+            "example" : "Max"
+          },
+          "geschlecht" : {
+            "type" : "string",
+            "description" : "Das Geschlecht des Lehrers (m - männlich, w - weiblich, d - divers, x - ohne Angabe im Geburtenregister)",
+            "nullable" : true,
+            "example" : "d"
+          },
+          "emailDienstlich" : {
+            "type" : "string",
+            "description" : "Die dienstliche EMail-Adresse des Lehrers.",
+            "nullable" : true,
+            "example" : "max.musterman@irgendeine.schule.nrw"
+          },
+          "lernplattformlogin" : {
+            "$ref" : "#/components/schemas/LernplattformV1Login"
+          }
+        },
+        "description" : "Spezifiziert die Datenstruktur eines Lehrers, innerhalb des Exports einer Lernplattform."
+      },
+      "LernplattformV1Lerngruppe" : {
+        "required" : [ "idsLehrer" ],
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "description" : "Die generierte eindeutige ID der Lerngruppe.",
+            "format" : "int64",
+            "example" : 123
+          },
+          "idIntern" : {
+            "type" : "integer",
+            "description" : "Die ID der Lerngruppe in der SVWS-DB (Die ID des Kurses oder die ID der Klasse in der Versetzungstabelle, siehe kursartID).",
+            "format" : "int64",
+            "example" : 1234
+          },
+          "idFach" : {
+            "type" : "integer",
+            "description" : "Die ID des Faches der Lerngruppe.",
+            "format" : "int64",
+            "example" : 123
+          },
+          "idKursart" : {
+            "type" : "integer",
+            "description" : "Gibt die ID der Kursart an. Ist dieser Wert null, so handelt es sich um Klassenunterricht.",
+            "format" : "int32",
+            "nullable" : true
+          },
+          "bezeichnung" : {
+            "type" : "string",
+            "description" : "Die Bezeichnung der Lerngruppe.",
+            "nullable" : true,
+            "example" : "D-GK4"
+          },
+          "kursartKuerzel" : {
+            "type" : "string",
+            "description" : "Das Kürzel der (allgemeinen) Kursart.",
+            "nullable" : true,
+            "example" : "GK"
+          },
+          "bilingualeSprache" : {
+            "type" : "string",
+            "description" : "Das einstellige Kürzel der bilingualen Sprache, sofern es sich um eine bilinguale Lerngruppe handelt.",
+            "nullable" : true,
+            "example" : "F"
+          },
+          "idsLehrer" : {
+            "type" : "array",
+            "items" : {
+              "type" : "integer",
+              "format" : "int64"
+            }
+          },
+          "wochenstunden" : {
+            "type" : "integer",
+            "description" : "Die Anzahl der Wochenstunden, falls es sich um einen Kurs handelt.",
+            "format" : "int32",
+            "nullable" : true,
+            "example" : 3
+          }
+        },
+        "description" : "Spezifiziert die Datenstruktur einer Lerngruppe in Bezug auf den Lernabschnitt, innerhalb des Exports einer Lernplattform."
+      },
+      "LernplattformV1Login" : {
+        "type" : "object",
+        "properties" : {
+          "benutzername" : {
+            "type" : "string",
+            "description" : "Der Benutzername für die Lernplattform.",
+            "nullable" : true,
+            "example" : "max.mustermann"
+          },
+          "initialpasswort" : {
+            "type" : "string",
+            "description" : "Das Initialpasswort für die Lernplattform.",
+            "nullable" : true,
+            "example" : "js32g23k"
+          }
+        },
+        "description" : "Spezifiziert die Datenstruktur von Logindaten eines Schülers oder Lehrers, innerhalb des Exports einer Lernplattform."
+      },
+      "LernplattformV1Schueler" : {
+        "required" : [ "idsLerngruppen", "lernplattformlogin" ],
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "description" : "Die ID des Schülers in der SVWS-DB.",
+            "format" : "int64",
+            "example" : 12345
+          },
+          "idJahrgang" : {
+            "type" : "integer",
+            "description" : "Die ID des aktuellen Jahrgangs, in dem sich der Schüler befindet.",
+            "format" : "int64",
+            "example" : 13
+          },
+          "idKlasse" : {
+            "type" : "integer",
+            "description" : "Die ID der aktuellen Klasse, in der sich der Schüler befindet.",
+            "format" : "int64",
+            "example" : 42
+          },
+          "nachname" : {
+            "type" : "string",
+            "description" : "Der Nachname des Schülers",
+            "nullable" : true,
+            "example" : "Mustermann"
+          },
+          "vorname" : {
+            "type" : "string",
+            "description" : "Der Vorname des Schülers",
+            "nullable" : true,
+            "example" : "Max"
+          },
+          "geschlecht" : {
+            "type" : "string",
+            "description" : "Das Geschlecht des Schülers (m - männlich, w - weiblich, d - divers, x - ohne Angabe im Geburtenregister)",
+            "nullable" : true,
+            "example" : "d"
+          },
+          "geburtsdatum" : {
+            "type" : "string",
+            "description" : "Das Geburtsdatum des Schülers",
+            "nullable" : true,
+            "example" : "21.01.2000"
+          },
+          "status" : {
+            "type" : "integer",
+            "description" : "die Status-ID des Schülers (0=Neuaufnahmen, 1=Warteliste, 2=Aktiv, 3=Beurlaubt, 6=Extern, 8=Abschluss, 9=Abgänger)",
+            "format" : "int32",
+            "example" : 2
+          },
+          "lernplattformlogin" : {
+            "$ref" : "#/components/schemas/LernplattformV1Login"
+          },
+          "idsLerngruppen" : {
+            "type" : "array",
+            "items" : {
+              "type" : "integer",
+              "format" : "int64"
+            }
+          }
+        },
+        "description" : "Spezifiziert die Datenstruktur eines Schülers in Bezug auf den Lernabschnitt, innerhalb des Exports einer Lernplattform."
+      },
+      "SchuljahresabschnittV1" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "description" : "Die ID des Schuljahresabschnittes",
+            "format" : "int64",
+            "example" : 4711
+          },
+          "schuljahr" : {
+            "type" : "integer",
+            "description" : "Das Schuljahr, in welchem der Abschnitt liegt",
+            "format" : "int32",
+            "example" : 2024
+          },
+          "abschnitt" : {
+            "type" : "integer",
+            "description" : "Die Nummer des Abschnitts im Schuljahr",
+            "format" : "int32",
+            "example" : 2
+          },
+          "idVorigerAbschnitt" : {
+            "type" : "integer",
+            "description" : "die ID des vorigen Schuljahresabschnittes",
+            "format" : "int64",
+            "nullable" : true,
+            "example" : 4710
+          },
+          "idFolgeAbschnitt" : {
+            "type" : "integer",
+            "description" : "die ID des folgenden Schuljahresabschnittes",
+            "format" : "int64",
+            "nullable" : true,
+            "example" : 4712
+          }
+        },
+        "description" : "Ein Abschnitt eines Schuljahres (z.B. Quartal / Halbjahr).",
+        "nullable" : true
+      }
+    },
+    "securitySchemes" : {
+      "basicAuth" : {
+        "type" : "http",
+        "scheme" : "basic"
+      }
+    }
+  }
+}

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { RouterLink } from 'vue-router'
 import { useAuthStore } from '@/auth/authStore'
 import { useTheme, type ThemePreference } from '@/composables/useTheme'
 
@@ -18,6 +19,10 @@ function cycleTheme(): void {
   <div class="app">
     <header class="app-header">
       <span class="app-title">SVWS-EduGate</span>
+      <nav v-if="authStore.isAuthenticated" class="app-nav" aria-label="Hauptnavigation">
+        <RouterLink :to="{ name: 'schultraeger-liste' }">Schulträger</RouterLink>
+        <RouterLink :to="{ name: 'svws-instanz-liste' }">SVWS-Instanzen</RouterLink>
+      </nav>
       <div class="app-header-actions">
         <button
           type="button"
@@ -55,6 +60,24 @@ function cycleTheme(): void {
   color: var(--accent);
 }
 
+.app-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.app-nav a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.app-nav a:hover,
+.app-nav a.router-link-active {
+  color: var(--accent);
+}
+
 .app-header-actions {
   display: flex;
   flex-wrap: wrap;
@@ -75,6 +98,7 @@ function cycleTheme(): void {
     text-align: center;
   }
 
+  .app-nav,
   .app-header-actions,
   .app-user {
     justify-content: center;

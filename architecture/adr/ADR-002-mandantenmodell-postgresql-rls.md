@@ -37,6 +37,25 @@ Gewählt wurde **Option 3**. Konkret:
 - RLS-Policies müssen bei jeder neuen Tabelle mitgedacht werden → Checkliste + Test (s. o.).
 - Verbindungs-Pooling erfordert sauberes Setzen/Zurücksetzen des Tenant-Kontexts (`SET LOCAL`).
 
+## Nachtrag (SVWS-Serververwaltung): Ausnahme für `svws_instanz`
+
+Bei der Umsetzung der SVWS-Serververwaltung stellte sich heraus, dass `svws_instanz` in der
+V1-Migration fälschlich als gewöhnliche mandantenbezogene Fachtabelle mit `tenant_id` modelliert
+worden war. Eine SVWS-Instanz ist jedoch eine **technische Betriebsressource des
+Dienstleisters**, die mehreren Schulträgern gleichzeitig dienen kann – keine 1:1- oder
+1:n-Bindung an genau einen Schulträger. Die Mandantenzuordnung entsteht ausschließlich über
+`schema.tenant_id`/`schema.schule_id`/`schema.instanz_id`, nicht über eine `tenant_id` auf der
+Instanz selbst.
+
+**Entscheidung:** `svws_instanz` ist von der generischen Regel „jede mandantenbezogene Tabelle
+trägt `tenant_id` + Tenant-RLS-Policy" ausgenommen. Sie erhält keine `tenant_id`-Spalte, bleibt
+aber mit RLS `ENABLE`+`FORCE` abgesichert, allerdings mit einem eigenen Policy-Muster
+(Operator-Vollzugriff, mandantenübergreifende Gateway-Read-Policy, keine Policy für die
+tenant-gebundene Standardrolle). Details, Begründung und die präzisierte Prüfregel für den
+RLS-Wächter-Test stehen in [ADR-011](./ADR-011-svws-instanz-als-geteilte-betriebsressource.md).
+Diese Tabelle bleibt (unverändert seit V1) `schule` und `schema` als tatsächlich
+mandantengebundene Fachtabellen im Sinne dieses ADRs.
+
 ## Verweise
 
-- ADR-001 (getrennte DB-User), ADR-008 (RLS der Wurzeltabelle), ADR-009 (Operator-Zugriff und Audit), ARCHITECTURE.md Kap. 5 (ER-Modell)
+- ADR-001 (getrennte DB-User), ADR-008 (RLS der Wurzeltabelle), ADR-009 (Operator-Zugriff und Audit), ADR-011 (Ausnahme `svws_instanz` als geteilte Betriebsressource), ARCHITECTURE.md Kap. 5 (ER-Modell)

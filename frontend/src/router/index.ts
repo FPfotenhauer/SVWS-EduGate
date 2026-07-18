@@ -21,6 +21,22 @@ const router = createRouter({
       props: true,
     },
     {
+      path: '/svws-instanzen',
+      name: 'svws-instanz-liste',
+      component: () => import('@/views/SvwsInstanzListView.vue'),
+    },
+    {
+      path: '/svws-instanzen/neu',
+      name: 'svws-instanz-neu',
+      component: () => import('@/views/SvwsInstanzFormView.vue'),
+    },
+    {
+      path: '/svws-instanzen/:id/bearbeiten',
+      name: 'svws-instanz-bearbeiten',
+      component: () => import('@/views/SvwsInstanzFormView.vue'),
+      props: true,
+    },
+    {
       path: '/auth/callback',
       name: 'auth-callback',
       component: () => import('@/views/LoginCallbackView.vue'),

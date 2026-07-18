@@ -77,7 +77,7 @@ flowchart TB
     kc["Keycloak<br/>(OIDC / IAM)"]
 
     subgraph traeger["Schulträger A … N (Mandanten)"]
-        svws["SVWS-Server<br/>(Instanzen je Schulträger)"]
+        svws["SVWS-Server-Instanzen<br/>(geteilte Betriebsressource, ADR-011)"]
         db[("MariaDB<br/>Schemas: Produktiv, Test")]
     end
 
@@ -108,6 +108,7 @@ flowchart TB
 | Authentifizierung und Autorisierung | Keycloak (OIDC) selbst gehostet; Rollen- und Scope-Modell entlang der Mandantenhierarchie. | [ADR-005](./adr/ADR-005-keycloak-oidc-rollenmodell.md) |
 | SVWS-Zugangsdaten schützen | Credentials verlassen niemals das Backend; verschlüsselte Ablage (AES-256-GCM). | [ADR-006](./adr/ADR-006-secret-handling-svws-credentials.md) |
 | Spätere externe Öffnung ohne Umbau | Netzzonenkonzept von Beginn an; externe Zone wird später nur „dazugeschaltet“. | [ADR-007](./adr/ADR-007-netzzonenkonzept.md) |
+| SVWS-Instanzen werden von mehreren Schulträgern gemeinsam betrieben | `svws_instanz` ohne `tenant_id`, keine 1:1-/1:n-Bindung an einen Schulträger; Mandantenzuordnung ausschließlich über `schema`; Verwaltung über `OperatorAccess`. | [ADR-011](./adr/ADR-011-svws-instanz-als-geteilte-betriebsressource.md) |
 
 Übergreifende Prinzipien: API-first gegen die SVWS-API, Security by Design, stateless Services, Clean Architecture (Ports & Adapters) im Backend.
 
@@ -158,7 +159,6 @@ Der Gateway-Service liest die Mandanten- und Verbindungsdaten nur lesend (eigene
 ```mermaid
 erDiagram
     SCHULTRAEGER ||--o{ SCHULE : "verwaltet"
-    SCHULTRAEGER ||--o{ SVWS_INSTANZ : "betreibt"
     SCHULE ||--o{ SCHEMA : "besitzt"
     SVWS_INSTANZ ||--o{ SCHEMA : "hostet"
 
@@ -175,19 +175,23 @@ erDiagram
     }
     SVWS_INSTANZ {
         uuid id PK
-        uuid schultraeger_id FK
+        string name
         string base_url
         string status
         bytea credentials_encrypted
+        boolean aktiv
     }
     SCHEMA {
         uuid id PK
+        uuid tenant_id FK
         uuid schule_id FK
         uuid instanz_id FK
         string schema_name
         string umgebung "PRODUKTIV | TEST"
     }
 ```
+
+**`SVWS_INSTANZ` ist bewusst keine Mandanten-Wurzel und kein Mandanten-Kind** ([ADR-011](./adr/ADR-011-svws-instanz-als-geteilte-betriebsressource.md)): Eine SVWS-Instanz ist eine technische Betriebsressource des Dienstleisters ohne `tenant_id` und ohne Bindung an genau einen Schulträger; mehrere Schulträger können dieselbe Instanz über ihre jeweiligen Schemas mitnutzen. Die Mandantenzuordnung entsteht ausschließlich über `SCHEMA` (`tenant_id`, `schule_id`, `instanz_id`), nicht über eine Beziehung `SCHULTRAEGER → SVWS_INSTANZ`.
 
 ---
 
@@ -257,8 +261,8 @@ flowchart TB
     end
 
     subgraph zone_svws["Zone 4: SVWS-Zone"]
-        s1["SVWS-Instanzen Schulträger A"]
-        s2["SVWS-Instanzen Schulträger B"]
+        s1["SVWS-Instanz 1<br/>(ggf. von mehreren Schulträgern genutzt)"]
+        s2["SVWS-Instanz 2<br/>(ggf. von mehreren Schulträgern genutzt)"]
     end
 
     rp -.->|"später: TLS 1.3"| gw
@@ -313,7 +317,7 @@ Alle Entscheidungen als ADRs unter [`architecture/adr/`](./adr/README.md).
 | Dienstleister | Betreiber von SVWS-Servern für mehrere Schulträger im RZ. |
 | Schulträger | Mandant; Kommune o. ä. mit mehreren Schulen. |
 | Schema | MariaDB-Datenbankschema einer Schule (Produktiv oder Test) auf einer SVWS-Instanz. |
-| SVWS-Instanz | Ein laufender SVWS-Server-Prozess mit zugehöriger MariaDB. |
+| SVWS-Instanz | Ein laufender SVWS-Server-Prozess mit zugehöriger MariaDB; mandantenübergreifende Betriebsressource, keine 1:1-/1:n-Bindung an einen Schulträger – mehrere Schulträger können dieselbe Instanz über ihre Schemas mitnutzen ([ADR-011](./adr/ADR-011-svws-instanz-als-geteilte-betriebsressource.md)). |
 | Control Plane | EduGate-Teil für Verwaltung (Mandanten, Instanzen, Schemas). |
 | Data Plane / Gateway | EduGate-Teil für den Durchgriff von API-Clients auf Schuldaten. |
 | ENM | Externes Notenmodul-Datenformat des SVWS-Servers. |

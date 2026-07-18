@@ -135,6 +135,13 @@
           <systemPropertyVariables>
             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
           </systemPropertyVariables>
+          <!-- Test-only Master-Key (ADR-006) für SecretStoreProducer/AesGcmSecretStore.fromEnvironment():
+               kein echtes Secret, nie außerhalb dieser Testsuite verwendet, daher unbedenklich im
+               Repository. Produktiv kommt der echte Wert ausschließlich über EDUGATE_MASTER_KEY als
+               Container-Secret (siehe .env.example/docker-compose.yml). -->
+          <environmentVariables>
+            <EDUGATE_MASTER_KEY>Qa/1jG8yD3huL/SgIx4PDcQr4ph/kU1sR/jhfVVezCg=</EDUGATE_MASTER_KEY>
+          </environmentVariables>
         </configuration>
       </plugin>
       <plugin>
@@ -144,6 +151,9 @@
           <systemPropertyVariables>
             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
           </systemPropertyVariables>
+          <environmentVariables>
+            <EDUGATE_MASTER_KEY>Qa/1jG8yD3huL/SgIx4PDcQr4ph/kU1sR/jhfVVezCg=</EDUGATE_MASTER_KEY>
+          </environmentVariables>
         </configuration>
       </plugin>
     </plugins>

@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
  * Row-Level Security die Migration übersteht (ARCHITECTURE.md Kap. 11, Risiko "RLS wird bei
  * neuen Tabellen vergessen").
  *
- * <p>Zwei mechanische Prüfregeln aus ADR-008:
+ * <p>Drei mechanische Prüfregeln aus ADR-008/ADR-011:
  * <ol>
  *   <li>Jede Tabelle mit einer Spalte {@code tenant_id} hat RLS ENABLE+FORCE und mindestens
  *       eine Policy, die {@code tenant_id} gegen {@code current_setting('edugate.tenant_id')}
@@ -26,6 +26,9 @@ import org.junit.jupiter.api.Test;
  *       einsehbar und enthält absichtlich NULL-tenant_id-Zeilen).</li>
  *   <li>Die Tabelle {@code schultraeger} hat RLS ENABLE+FORCE und mindestens eine Policy, die
  *       {@code id} gegen {@code current_setting('edugate.tenant_id')} prüft.</li>
+ *   <li>Die Tabelle {@code svws_instanz} hat seit ADR-011 bewusst KEINE {@code tenant_id}-Spalte
+ *       mehr (mandantenübergreifende Betriebsressource) - eigene Prüfregel in
+ *       {@link SvwsInstanzRlsTest}.</li>
  * </ol>
  */
 @QuarkusTest
@@ -39,8 +42,11 @@ class RlsGuardTest {
         try (Connection connection = PostgresTestResource.openAdminConnection()) {
             final List<String> tenantTables = tablesWithColumn(connection, "tenant_id", AUDIT_TABLE_EXCEPTION);
 
-            assertThat(tenantTables).as("mindestens die drei Fachtabellen mit tenant_id")
-                .contains("schule", "svws_instanz", "schema");
+            assertThat(tenantTables).as("mindestens die zwei tenant-gebundenen Fachtabellen")
+                .contains("schule", "schema");
+            assertThat(tenantTables)
+                .as("svws_instanz ist seit ADR-011 bewusst keine tenant-gebundene Tabelle mehr")
+                .doesNotContain("svws_instanz");
 
             for (final String table : tenantTables) {
                 assertRlsEnabledAndForced(connection, table);

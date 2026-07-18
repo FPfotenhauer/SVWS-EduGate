@@ -10,7 +10,9 @@ von der Vue-Oberfläche über die Control-Plane-API bis PostgreSQL, mit aktiver 
 und auditiertem Admin-Zugriff.
 
 Verbindliche Architekturdokumentation: [`architecture/ARCHITECTURE.md`](architecture/ARCHITECTURE.md)
-und die [ADRs](architecture/adr/README.md).
+und die [ADRs](architecture/adr/README.md). Nutzerorientierte Dokumentation (Betreiber,
+Administration, Anwender, Sicherheit/Compliance, Entwicklung): [`docs/README.md`](docs/README.md).
+Sicherheits- und Compliance-Nachweise: [`compliance/README.md`](compliance/README.md).
 
 ## Quickstart
 

@@ -7,6 +7,8 @@ package de.svws_nrw.edugate.control.operator;
  */
 public class OperatorNotFoundException extends RuntimeException {
 
+    private static final long serialVersionUID = 1L;
+
     public OperatorNotFoundException(final String message) {
         super(message);
     }

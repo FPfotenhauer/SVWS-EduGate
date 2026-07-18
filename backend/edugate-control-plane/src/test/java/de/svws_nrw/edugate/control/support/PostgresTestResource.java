@@ -25,6 +25,10 @@ public class PostgresTestResource implements QuarkusTestResourceLifecycleManager
     private static PostgreSQLContainer<?> container;
 
     @Override
+    // Der Container wird bewusst in ein Feld statt in eine lokale Variable geschrieben und erst
+    // in stop() geschlossen, was die methodenlokale Resource-Leak-Analyse nicht erkennt (false
+    // positive).
+    @SuppressWarnings("resource")
     public Map<String, String> start() {
         container = new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
             .withDatabaseName("edugate")

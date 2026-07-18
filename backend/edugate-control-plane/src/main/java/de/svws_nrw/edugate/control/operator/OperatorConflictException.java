@@ -8,6 +8,8 @@ package de.svws_nrw.edugate.control.operator;
  */
 public class OperatorConflictException extends RuntimeException {
 
+    private static final long serialVersionUID = 1L;
+
     public OperatorConflictException(final String message) {
         super(message);
     }

@@ -9,6 +9,8 @@ package de.svws_nrw.edugate.control.operator;
  */
 public class OperatorDeniedException extends RuntimeException {
 
+    private static final long serialVersionUID = 1L;
+
     public OperatorDeniedException(final String message) {
         super(message);
     }

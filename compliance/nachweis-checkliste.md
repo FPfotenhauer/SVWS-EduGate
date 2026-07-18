@@ -16,7 +16,7 @@ Diese Checkliste sammelt pruefbare Artefakte, die fuer Sicherheits- und Complian
 | SVWS-Credentials werden verschluesselt abgelegt. | SecretStore-Unit-Tests, ADR-006. | geplant |
 | Manipulierte Chiffrate werden erkannt. | AES-GCM-Manipulationstest. | geplant |
 | Keine echten Secrets im Repository. | `git grep`/Secret-Scan, `.env.example` nur mit Platzhaltern. | geplant |
-| Verbindungstest ohne hinterlegte Zugangsdaten liefert 409, keinen 500. | RestAssured-Test `SvwsInstanzResourceTest`. | geplant |
+| Verbindungstest ohne hinterlegte Zugangsdaten prueft nur Basis-Erreichbarkeit (kein Zugriff auf Zugangsdaten-Endpunkt, Status wird DEGRADED statt OK), liefert keinen 500. | RestAssured-Test `SvwsInstanzResourceTest`. | geplant |
 | Verbindungstest leakt keine Zugangsdaten oder Stacktraces in Antwort oder Audit-Details. | RestAssured-Test + Code-Review `HttpSvwsConnectionTester`/`SvwsInstanzService`. | geplant |
 | SVWS-Instanz-Kurzbezeichnung ist eindeutig. | RestAssured-Test + Migration `V3__svws_instanz_verbindungstest_und_details.sql`. | geplant |
 | Frontend speichert Access-Token nicht in `localStorage`. | Code-Review, Frontend-Test/Static Check falls sinnvoll. | geplant |

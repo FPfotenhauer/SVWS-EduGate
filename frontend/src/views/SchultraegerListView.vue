@@ -1,13 +1,28 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useSchultraegerStore } from '@/stores/schultraegerStore'
-import type { Schultraeger } from '@/types/schultraeger'
 
 const store = useSchultraegerStore()
 const suchbegriff = ref('')
-const zuDeaktivieren = ref<Schultraeger | null>(null)
+
+// Auswahl je Schulträger-ID, seitenübergreifend - Vorbereitung für spätere Massenverwaltung
+// (analog zur SVWS-Instanzen-Liste). Aktuell noch ohne eigene Aktion, nur die Auswahl-UI.
+const ausgewaehlt = ref<Record<string, boolean>>({})
+
+const alleAufSeiteAusgewaehlt = computed(
+  () => store.items.length > 0 && store.items.every((schultraeger) => ausgewaehlt.value[schultraeger.id]),
+)
+const teilweiseAusgewaehlt = computed(
+  () => !alleAufSeiteAusgewaehlt.value && store.items.some((schultraeger) => ausgewaehlt.value[schultraeger.id]),
+)
+
+function alleAufSeiteUmschalten(): void {
+  const neuerWert = !alleAufSeiteAusgewaehlt.value
+  for (const schultraeger of store.items) {
+    ausgewaehlt.value[schultraeger.id] = neuerWert
+  }
+}
 
 onMounted(() => store.fetchList())
 
@@ -25,12 +40,6 @@ function vorherigeSeite(): void {
   if (store.page > 0) {
     store.fetchList({ page: store.page - 1 })
   }
-}
-
-async function bestaetigenDeaktivieren(): Promise<void> {
-  if (!zuDeaktivieren.value) return
-  await store.deactivate(zuDeaktivieren.value.id)
-  zuDeaktivieren.value = null
 }
 </script>
 
@@ -57,6 +66,16 @@ async function bestaetigenDeaktivieren(): Promise<void> {
         </caption>
         <thead>
           <tr>
+            <th scope="col" class="checkbox-zelle">
+              <input
+                type="checkbox"
+                aria-label="Alle auf dieser Seite auswählen"
+                :checked="alleAufSeiteAusgewaehlt"
+                :indeterminate="teilweiseAusgewaehlt"
+                @change="alleAufSeiteUmschalten"
+              />
+            </th>
+            <th scope="col">ID</th>
             <th scope="col">Name</th>
             <th scope="col">Trägernummer</th>
             <th scope="col">Status</th>
@@ -65,6 +84,14 @@ async function bestaetigenDeaktivieren(): Promise<void> {
         </thead>
         <tbody>
           <tr v-for="schultraeger in store.items" :key="schultraeger.id">
+            <td class="checkbox-zelle">
+              <input
+                v-model="ausgewaehlt[schultraeger.id]"
+                type="checkbox"
+                :aria-label="`'${schultraeger.name}' auswählen`"
+              />
+            </td>
+            <td class="id-zelle" :title="schultraeger.id">{{ schultraeger.id }}</td>
             <td>{{ schultraeger.name }}</td>
             <td>{{ schultraeger.traegernummer }}</td>
             <td>
@@ -73,18 +100,16 @@ async function bestaetigenDeaktivieren(): Promise<void> {
               </span>
             </td>
             <td>
-              <div class="aktionen">
-                <RouterLink :to="{ name: 'schultraeger-bearbeiten', params: { id: schultraeger.id } }">
-                  Bearbeiten
-                </RouterLink>
-                <button v-if="schultraeger.aktiv" type="button" class="danger" @click="zuDeaktivieren = schultraeger">
-                  Deaktivieren
-                </button>
-              </div>
+              <RouterLink
+                :to="{ name: 'schultraeger-bearbeiten', params: { id: schultraeger.id } }"
+                class="button-secondary"
+              >
+                Bearbeiten
+              </RouterLink>
             </td>
           </tr>
           <tr v-if="store.items.length === 0">
-            <td colspan="4">Keine Schulträger gefunden.</td>
+            <td colspan="6">Keine Schulträger gefunden.</td>
           </tr>
         </tbody>
       </table>
@@ -97,14 +122,6 @@ async function bestaetigenDeaktivieren(): Promise<void> {
         Weiter
       </button>
     </nav>
-
-    <ConfirmDialog
-      :open="zuDeaktivieren !== null"
-      titel="Schulträger deaktivieren"
-      :nachricht="`Soll '${zuDeaktivieren?.name}' wirklich deaktiviert werden?`"
-      @confirm="bestaetigenDeaktivieren"
-      @cancel="zuDeaktivieren = null"
-    />
   </main>
 </template>
 
@@ -132,30 +149,93 @@ async function bestaetigenDeaktivieren(): Promise<void> {
 
 .table-wrap {
   overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.table-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+
+.table-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.table-wrap::-webkit-scrollbar-thumb {
+  background-color: var(--line);
+  border-radius: 999px;
+}
+
+.table-wrap::-webkit-scrollbar-thumb:hover {
+  background-color: var(--accent);
 }
 
 table {
   width: 100%;
-  min-width: 32rem;
+  min-width: 40rem;
   border-collapse: collapse;
+  font-size: 0.9rem;
 }
 
 th,
 td {
   text-align: left;
-  padding: 0.5rem;
+  padding: 0.35rem 0.6rem;
   border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+  line-height: 1.3;
 }
 
-.aktionen {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
+thead th {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-soft);
+  background: var(--surface-strong);
+}
+
+tbody tr:hover {
+  background: var(--surface-strong);
+}
+
+.checkbox-zelle {
+  width: 1%;
+  padding-right: 0;
+  text-align: center;
+}
+
+.id-zelle {
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8em;
+  color: var(--ink-soft);
+}
+
+.button-secondary {
+  display: inline-block;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button-secondary:hover {
+  border-color: var(--accent);
 }
 
 .status {
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .status-aktiv {

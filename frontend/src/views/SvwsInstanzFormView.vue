@@ -231,13 +231,12 @@ function formatiereZeitpunkt(iso: string | null): string {
       </p>
       <p v-else class="hinweis">Noch kein Verbindungstest durchgeführt.</p>
 
-      <button
-        type="button"
-        class="button-primary"
-        :disabled="!credentialsHinterlegt || verbindungstestLaeuft"
-        :title="credentialsHinterlegt ? '' : 'Keine Zugangsdaten hinterlegt'"
-        @click="verbindungstestStarten"
-      >
+      <p v-if="!credentialsHinterlegt" class="hinweis">
+        Keine Zugangsdaten hinterlegt – der Test prüft in diesem Fall nur die Basis-Erreichbarkeit, nicht die Gültigkeit
+        von Zugangsdaten.
+      </p>
+
+      <button type="button" class="button-primary" :disabled="verbindungstestLaeuft" @click="verbindungstestStarten">
         {{ verbindungstestLaeuft ? 'Teste …' : 'Verbindung testen' }}
       </button>
     </section>

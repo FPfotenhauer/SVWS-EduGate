@@ -5,10 +5,17 @@ import { useSvwsInstanzStore } from '@/stores/svwsInstanzStore'
 import { ApiError } from '@/types/problem'
 import type { InstanzStatus, SvwsInstanz } from '@/types/svwsInstanz'
 
+// Nebenläufigkeit und Mindestabstand für den automatischen Verbindungstest beim Öffnen der
+// Seite: begrenzt, um den "operator"-Connection-Pool (Quarkus-Default max. 20) nicht durch
+// viele gleichzeitige Tests zu erschöpfen, und überspringt kürzlich getestete Instanzen, damit
+// wiederholtes Neuladen nicht jedes Mal alle Instanzen erneut (und auditiert) testet.
+const AUTO_TEST_NEBENLAEUFIGKEIT = 4
+const AUTO_TEST_MINDESTABSTAND_MS = 5 * 60 * 1000
+
 const store = useSvwsInstanzStore()
 const suchbegriff = ref('')
 const statusFilterAuswahl = ref<InstanzStatus | ''>('')
-const testendeId = ref<string | null>(null)
+const testendeIds = ref<Record<string, boolean>>({})
 const testFehler = ref<Record<string, string>>({})
 
 // Auswahl je Instanz-ID, seitenübergreifend - Vorbereitung für spätere Massenverwaltung
@@ -30,29 +37,39 @@ function alleAufSeiteUmschalten(): void {
   }
 }
 
-const statusLabel: Record<string, string> = { OK: 'OK', DEGRADED: 'Beeinträchtigt', UNREACHABLE: 'Nicht erreichbar' }
+const statusLabel: Record<string, string> = { OK: 'OK', DEGRADED: 'OK', UNREACHABLE: 'N/A' }
 
-onMounted(() => store.fetchList())
+// Liste neu laden und anschließend die neu sichtbaren Instanzen automatisch (mit)testen - auch
+// bei Filter-/Seitenwechsel kann darunter eine Instanz sein, die inzwischen nicht mehr
+// erreichbar ist. Nutzt dieselben Schutzmechanismen wie beim initialen Laden.
+async function listeNeuLadenUndAutomatischTesten(
+  optionen: { page?: number; q?: string; status?: InstanzStatus | '' } = {},
+): Promise<void> {
+  await store.fetchList(optionen)
+  void alleAutomatischTesten()
+}
+
+onMounted(() => listeNeuLadenUndAutomatischTesten())
 
 function suchen(): void {
-  store.fetchList({ page: 0, q: suchbegriff.value, status: statusFilterAuswahl.value })
+  void listeNeuLadenUndAutomatischTesten({ page: 0, q: suchbegriff.value, status: statusFilterAuswahl.value })
 }
 
 function naechsteSeite(): void {
   if ((store.page + 1) * store.size < store.totalElements) {
-    store.fetchList({ page: store.page + 1 })
+    void listeNeuLadenUndAutomatischTesten({ page: store.page + 1 })
   }
 }
 
 function vorherigeSeite(): void {
   if (store.page > 0) {
-    store.fetchList({ page: store.page - 1 })
+    void listeNeuLadenUndAutomatischTesten({ page: store.page - 1 })
   }
 }
 
 async function verbindungstestStarten(instanz: SvwsInstanz): Promise<void> {
   testFehler.value = { ...testFehler.value, [instanz.id]: '' }
-  testendeId.value = instanz.id
+  testendeIds.value[instanz.id] = true
   try {
     await store.testConnection(instanz.id)
   } catch (error) {
@@ -61,8 +78,29 @@ async function verbindungstestStarten(instanz: SvwsInstanz): Promise<void> {
       [instanz.id]: error instanceof ApiError ? error.message : 'Verbindungstest fehlgeschlagen.',
     }
   } finally {
-    testendeId.value = null
+    delete testendeIds.value[instanz.id]
   }
+}
+
+// Automatischer Verbindungstest für die aktuell sichtbaren Instanzen (initiales Laden,
+// Suche/Filter, Seitenwechsel): sonst sähe man z. B. bei 20 Instanzen eine nicht erreichbare
+// erst, nachdem jemand manuell auf "Testen" klickt. Läuft mit begrenzter Nebenläufigkeit statt
+// alle auf einmal (siehe Konstanten oben) und lässt kürzlich getestete Instanzen aus.
+async function alleAutomatischTesten(): Promise<void> {
+  const kandidaten = store.items.filter((instanz) => {
+    if (!instanz.lastConnectionTestAt) return true
+    return Date.now() - new Date(instanz.lastConnectionTestAt).getTime() > AUTO_TEST_MINDESTABSTAND_MS
+  })
+
+  let naechsterIndex = 0
+  async function worker(): Promise<void> {
+    while (naechsterIndex < kandidaten.length) {
+      const instanz = kandidaten[naechsterIndex++]
+      await verbindungstestStarten(instanz)
+    }
+  }
+
+  await Promise.all(Array.from({ length: AUTO_TEST_NEBENLAEUFIGKEIT }, worker))
 }
 
 function formatiereZeitpunkt(iso: string | null): string {
@@ -75,6 +113,13 @@ function formatiereZeitpunkt(iso: string | null): string {
         minute: '2-digit',
       })
     : '–'
+}
+
+// Farbe für den letzten Verbindungstest: grün bei vollständig geprüften, gültigen Zugangsdaten;
+// orange bei erfolgreicher Erreichbarkeitsprüfung ohne (geprüfte) Zugangsdaten; rot bei Fehlschlag.
+function verbindungstestFarbe(instanz: SvwsInstanz): string {
+  if (instanz.lastConnectionTestSuccess === false) return 'status-unreachable'
+  return instanz.credentialsHinterlegt ? 'status-aktiv' : 'status-degraded'
 }
 </script>
 
@@ -145,35 +190,37 @@ function formatiereZeitpunkt(iso: string | null): string {
               </span>
             </td>
             <td>
-              <div class="zelle-inline">
-                <span :class="['status', instanz.credentialsHinterlegt ? 'status-aktiv' : 'status-inaktiv']">
-                  {{ instanz.credentialsHinterlegt ? 'Hinterlegt' : 'Nicht hinterlegt' }}
-                </span>
-                <span v-if="instanz.credentialsHinterlegt" class="hinweis-klein">
-                  seit {{ formatiereZeitpunkt(instanz.credentialsUpdatedAt) }}
-                </span>
-              </div>
+              <span
+                v-if="instanz.credentialsHinterlegt"
+                :class="['status', instanz.lastConnectionTestSuccess === false ? 'status-degraded' : 'status-aktiv']"
+              >
+                {{ formatiereZeitpunkt(instanz.credentialsUpdatedAt) }}
+              </span>
+              <span v-else class="status status-unreachable" title="Keine Zugangsdaten hinterlegt">✗</span>
             </td>
             <td>
               <div class="zelle-inline">
                 <button
                   type="button"
                   class="btn-klein"
-                  :disabled="!instanz.credentialsHinterlegt || testendeId === instanz.id"
-                  :title="instanz.credentialsHinterlegt ? '' : 'Keine Zugangsdaten hinterlegt'"
+                  :disabled="testendeIds[instanz.id]"
+                  :title="
+                    instanz.credentialsHinterlegt
+                      ? ''
+                      : 'Keine Zugangsdaten hinterlegt - prüft nur Basis-Erreichbarkeit'
+                  "
                   @click="verbindungstestStarten(instanz)"
                 >
-                  {{ testendeId === instanz.id ? 'Teste …' : 'Testen' }}
+                  {{ testendeIds[instanz.id] ? 'Teste …' : 'Testen' }}
                 </button>
                 <span v-if="testFehler[instanz.id]" role="alert" class="fehler hinweis-klein">
                   {{ testFehler[instanz.id] }}
                 </span>
                 <span
                   v-else-if="instanz.lastConnectionTestAt"
-                  class="hinweis-klein"
+                  :class="['status', verbindungstestFarbe(instanz)]"
                   :title="instanz.lastConnectionTestMessage ?? ''"
                 >
-                  {{ instanz.lastConnectionTestSuccess ? '✓' : '✗' }}
                   {{ formatiereZeitpunkt(instanz.lastConnectionTestAt) }}
                 </span>
                 <span v-else class="hinweis-klein">Kein Test</span>
@@ -318,7 +365,7 @@ tbody tr:hover {
 
 .zelle-inline {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: baseline;
   gap: 0.4rem;
 }

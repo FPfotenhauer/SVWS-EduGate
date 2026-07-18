@@ -5,7 +5,6 @@ import de.svws_nrw.edugate.control.operator.OperatorAccess;
 import de.svws_nrw.edugate.control.operator.OperatorConflictException;
 import de.svws_nrw.edugate.control.operator.OperatorNotFoundException;
 import de.svws_nrw.edugate.control.operator.OperatorOutcome;
-import de.svws_nrw.edugate.control.operator.OperatorPreconditionException;
 import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsInstanzCreateRequest;
 import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsInstanzCredentialsRequest;
 import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsInstanzDto;
@@ -200,9 +199,17 @@ public class SvwsInstanzService {
     }
 
     /**
-     * Führt einen Verbindungstest gegen die hinterlegte Base-URL mit den hinterlegten
-     * Zugangsdaten aus (ADR-006: Entschlüsselung nur unmittelbar vor dem Aufruf, im Speicher).
-     * Aktualisiert Erreichbarkeitsstatus, Zeitpunkt und eine sichere Ergebnis-Meldung.
+     * Führt einen Verbindungstest gegen die hinterlegte Base-URL aus (ADR-006: Entschlüsselung
+     * nur unmittelbar vor dem Aufruf, im Speicher). Aktualisiert Erreichbarkeitsstatus,
+     * Zeitpunkt und eine sichere Ergebnis-Meldung.
+     *
+     * <p>Sind Zugangsdaten hinterlegt, werden Erreichbarkeit <b>und</b> Gültigkeit/Rechte der
+     * Zugangsdaten geprüft ({@link SvwsConnectionTester#test}); Erfolg setzt den Status auf
+     * {@link InstanzStatus#OK}. Sind keine Zugangsdaten hinterlegt, wird nur die reine
+     * Erreichbarkeit geprüft ({@link SvwsConnectionTester#testReachability}); Erfolg setzt den
+     * Status auf {@link InstanzStatus#DEGRADED} (erreichbar, aber ungeprüfte Zugangsdaten) statt
+     * {@code OK}. In beiden Fällen setzt ein technischer Fehlschlag den Status auf
+     * {@link InstanzStatus#UNREACHABLE}.
      */
     public SvwsInstanzDto testConnection(final String adminSubject, final UUID id) {
         return operatorAccess.execute(adminSubject, AuditAction.SVWS_INSTANZ_CONNECTION_TEST, "svws_instanz", connection -> {
@@ -220,18 +227,19 @@ public class SvwsInstanzService {
                 }
             }
 
+            final SvwsConnectionTestResult result;
+            final InstanzStatus newStatus;
             if (credentialsEncrypted == null) {
-                throw new OperatorPreconditionException(
-                    "Für diese SVWS-Instanz sind keine Zugangsdaten hinterlegt. Ein Verbindungstest ist nicht möglich.");
+                result = connectionTester.testReachability(baseUrl);
+                newStatus = result.success() ? InstanzStatus.DEGRADED : InstanzStatus.UNREACHABLE;
+            } else {
+                final String decrypted = new String(secretStore.decrypt(credentialsEncrypted), StandardCharsets.UTF_8);
+                final int separator = decrypted.indexOf(':');
+                final String username = separator < 0 ? decrypted : decrypted.substring(0, separator);
+                final String password = separator < 0 ? "" : decrypted.substring(separator + 1);
+                result = connectionTester.test(baseUrl, username, password);
+                newStatus = result.success() ? InstanzStatus.OK : InstanzStatus.UNREACHABLE;
             }
-
-            final String decrypted = new String(secretStore.decrypt(credentialsEncrypted), StandardCharsets.UTF_8);
-            final int separator = decrypted.indexOf(':');
-            final String username = separator < 0 ? decrypted : decrypted.substring(0, separator);
-            final String password = separator < 0 ? "" : decrypted.substring(separator + 1);
-
-            final SvwsConnectionTestResult result = connectionTester.test(baseUrl, username, password);
-            final InstanzStatus newStatus = result.success() ? InstanzStatus.OK : InstanzStatus.UNREACHABLE;
 
             final String updateSql = "UPDATE svws_instanz SET status = ?, last_connection_test_at = now(), "
                 + "last_connection_test_success = ?, last_connection_test_message = ?, updated_at = now() "

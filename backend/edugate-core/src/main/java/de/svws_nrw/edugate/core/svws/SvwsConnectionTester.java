@@ -16,5 +16,13 @@ package de.svws_nrw.edugate.core.svws;
  */
 public interface SvwsConnectionTester {
 
+    /** Prüft Erreichbarkeit und Gültigkeit/Rechte der übergebenen Zugangsdaten in einem Schritt. */
     SvwsConnectionTestResult test(String baseUrl, String username, String password);
+
+    /**
+     * Prüft ausschließlich die reine Erreichbarkeit der SVWS-Instanz, ohne Zugangsdaten - für
+     * den Fall, dass (noch) keine Zugangsdaten hinterlegt sind. Liefert bewusst keine Aussage
+     * über Gültigkeit oder Rechte irgendwelcher Zugangsdaten.
+     */
+    SvwsConnectionTestResult testReachability(String baseUrl);
 }

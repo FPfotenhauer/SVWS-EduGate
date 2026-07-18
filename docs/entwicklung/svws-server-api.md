@@ -59,14 +59,33 @@ relevante Endpunkte:
 - Migration: `POST /api/schema/migrate/{schema}/{mariadb|mysql|mssql|mdb}`
 - Export/Import: `GET /api/schema/export/{schema}/{sqlite|zip}`, `POST /api/schema/import/{schema}/sqlite`
 
-**Hinweis für den Verbindungstest** (`edugate-core/.../svws/HttpSvwsConnectionTester`): Die
-Privileged-API bietet zwei Endpunkte, die explizit ein Datenbank-Kennwort prüfen –
-`POST /api/schema/root/user/checkrootprivs` und `POST /api/schema/root/user/checkpwd`
-(Request-Body `BenutzerKennwort { user, password }`). Diese wirken wie die fachlich passendere
-Zielroute für den Verbindungstest als der aktuell verwendete blinde `GET` auf die Base-URL (siehe
-TODO-Kommentar in `HttpSvwsConnectionTester`). Nicht ohne Weiteres umgestellt, weil aus der
-Spezifikation allein nicht eindeutig hervorgeht, ob die Prüfung über den Basic-Auth-Header, den
-JSON-Body oder beides erfolgt – vor einer Umstellung gegen eine echte SVWS-Instanz verifizieren.
+**Verbindungstest** (`edugate-core/.../svws/HttpSvwsConnectionTester`): ruft
+`POST /api/schema/root/user/checkrootprivs` auf (Request-Body `BenutzerKennwort { user, password }`,
+Response-Body ein roher JSON-`Boolean`). Verifiziert gegen eine echte lokale SVWS-Testinstanz
+(2026-07-18):
+
+- Der SVWS-Server erzwingt HTTP-Basic-Auth **generisch auf `/api/schema/…`** (Jetty-Ebene, vor
+  jeder Methode) – ohne gültigen `Authorization`-Header gibt es 401, unabhängig vom Body.
+- Der Endpunkt selbst öffnet zusätzlich, unabhängig vom Basic-Auth-Header, eine direkte
+  Datenbankverbindung mit `user`/`password` aus dem JSON-Body und meldet als Ergebnis nur
+  `true`/`false` zurück (Quelle: `DBUtilsSchema.checkDBRootUser` im SVWS-Server).
+- `HttpSvwsConnectionTester` sendet deshalb dieselben entschlüsselten Zugangsdaten sowohl als
+  Basic-Auth-Header als auch im Body – ein Aufruf prüft damit Erreichbarkeit, Passwortgültigkeit
+  und privilegierte (root-)Rechte in einem Schritt.
+- `checkpwd` (`DBUtilsSchema.checkDBPassword`) ist der schwächere Nachbar-Endpunkt (prüft nur
+  allgemeinen Schema-Zugriff, keine root-Rechte) – für `svws_instanz`-Credentials bewusst nicht
+  verwendet, da diese explizit privilegiert sein müssen.
+- Selbstsignierte Test-SVWS-Instanzen brauchen ein Zertifikat mit passendem Subject Alternative
+  Name (SAN) für die tatsächlich verwendete Host/IP, sonst schlägt die Java-Hostname-Verifizierung
+  fehl, selbst wenn das Zertifikat selbst vertraut wird (siehe `DevTrustStoreSslContext` für den
+  optionalen, rein lokalen Dev-Truststore-Mechanismus).
+
+Sind (noch) keine Zugangsdaten hinterlegt, gibt es nichts, was `checkrootprivs` prüfen könnte.
+`SvwsInstanzService.testConnection` weicht in diesem Fall auf
+`SvwsConnectionTester#testReachability` aus, das unauthentifiziert `GET /status/alive` aufruft
+(bestätigt: dieser Endpunkt verlangt keine Basic-Auth, im Gegensatz zu `/api/schema/…`). Erfolg
+setzt den Status dann auf `DEGRADED` statt `OK`, da nur Erreichbarkeit, nicht Zugangsdatengültigkeit
+geprüft wurde.
 
 ### 3. External-API (`open-api-external.json`, aktuell 4 Pfade)
 

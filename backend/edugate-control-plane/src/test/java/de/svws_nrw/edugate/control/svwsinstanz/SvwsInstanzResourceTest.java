@@ -8,6 +8,8 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import de.svws_nrw.edugate.control.support.PostgresTestResource;
@@ -360,7 +362,11 @@ class SvwsInstanzResourceTest {
 
     @Test
     @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
-    void verbindungstestOhneZugangsdatenErgibt409() {
+    void verbindungstestOhneZugangsdatenPrueftNurErreichbarkeitUndSetztDegraded() {
+        when(connectionTester.testReachability(any()))
+            .thenReturn(SvwsConnectionTestResult.success(
+                "SVWS-Instanz erreichbar (keine Zugangsdaten hinterlegt, nur Basis-Erreichbarkeit geprüft)."));
+
         final String baseUrl = "https://svws-noauth-" + UUID.randomUUID() + ".example.org";
         final String createBody = "{\"name\": \"Ohne Zugangsdaten\", \"baseUrl\": \"" + baseUrl + "\"}";
 
@@ -375,8 +381,37 @@ class SvwsInstanzResourceTest {
         given()
             .when().post(PATH + "/" + id + "/connection-test")
             .then()
-            .statusCode(409)
-            .contentType("application/problem+json");
+            .statusCode(200)
+            .body("status", equalTo("DEGRADED"))
+            .body("lastConnectionTestSuccess", equalTo(true))
+            .body("lastConnectionTestAt", notNullValue());
+
+        verify(connectionTester, never()).test(any(), any(), any());
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void fehlgeschlagenerVerbindungstestOhneZugangsdatenSetztStatusUnreachable() {
+        when(connectionTester.testReachability(any()))
+            .thenReturn(SvwsConnectionTestResult.failure("Verbindung zur SVWS-Instanz war nicht möglich (Netzwerkfehler)."));
+
+        final String baseUrl = "https://svws-noauth-unreach-" + UUID.randomUUID() + ".example.org";
+        final String createBody = "{\"name\": \"Ohne Zugangsdaten unerreichbar\", \"baseUrl\": \"" + baseUrl + "\"}";
+
+        final String id = given()
+            .contentType(ContentType.JSON)
+            .body(createBody)
+            .when().post(PATH)
+            .then()
+            .statusCode(201)
+            .extract().path("id");
+
+        given()
+            .when().post(PATH + "/" + id + "/connection-test")
+            .then()
+            .statusCode(200)
+            .body("status", equalTo("UNREACHABLE"))
+            .body("lastConnectionTestSuccess", equalTo(false));
     }
 
     @Test

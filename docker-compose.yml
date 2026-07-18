@@ -1,0 +1,160 @@
+# SVWS-EduGate – lokale Entwicklungsumgebung.
+#
+# Netzzonen gemäß ADR-007 (architecture/adr/ADR-007-netzzonenkonzept.md), als getrennte
+# Compose-Netze nachgebildet:
+#   - zone-mgmt: Verwaltungsnetz (Postgres, Keycloak, Control Plane, Frontend-Dev-Server)
+#   - zone-gw:   Gateway-Zone
+#   - zone-svws: SVWS-Zone (in Phase 1 noch leer; spätere SVWS-Testinstanzen docken hier an,
+#                ohne dass Control Plane/Gateway umgebaut werden müssen)
+#
+# gateway hängt zusätzlich an zone-mgmt, ausschließlich um Keycloak (JWKS) und PostgreSQL
+# (read-only, edugate_gateway_ro) zu erreichen. In Produktion wird das per Firewall-Regel auf
+# genau diese beiden Ziele beschränkt (Zone 2 → Zone 1 gemäß ADR-007), nicht durch das
+# Compose-Netz selbst.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      EDUGATE_CONTROL_DB_PASSWORD: ${EDUGATE_CONTROL_DB_PASSWORD}
+      EDUGATE_OPERATOR_DB_PASSWORD: ${EDUGATE_OPERATOR_DB_PASSWORD}
+      EDUGATE_GATEWAY_DB_PASSWORD: ${EDUGATE_GATEWAY_DB_PASSWORD}
+    volumes:
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - zone-mgmt
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      EDUGATE_DEV_ADMIN_PASSWORD: ${EDUGATE_DEV_ADMIN_PASSWORD}
+      EDUGATE_DEMO_CLIENT_SECRET: ${EDUGATE_DEMO_CLIENT_SECRET}
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./docker/keycloak/realm-edugate.json:/opt/keycloak/data/import/realm-edugate.json:ro
+    ports:
+      - "8180:8080"
+    networks:
+      - zone-mgmt
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          echo -e "GET /health/ready HTTP/1.1\r\nhost: localhost\r\nConnection: close\r\n\r\n" >&3 &&
+          cat <&3 | grep -q '"status": "UP"'
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  control-plane:
+    build:
+      context: ./backend
+      dockerfile: edugate-control-plane/src/main/docker/Dockerfile.jvm
+    environment:
+      EDUGATE_DB_HOST: postgres
+      EDUGATE_DB_PORT: "5432"
+      EDUGATE_DB_NAME: ${POSTGRES_DB}
+      EDUGATE_CONTROL_DB_PASSWORD: ${EDUGATE_CONTROL_DB_PASSWORD}
+      EDUGATE_OPERATOR_DB_PASSWORD: ${EDUGATE_OPERATOR_DB_PASSWORD}
+      EDUGATE_DB_ADMIN_USERNAME: ${POSTGRES_USER}
+      EDUGATE_DB_ADMIN_PASSWORD: ${POSTGRES_PASSWORD}
+      EDUGATE_MASTER_KEY: ${EDUGATE_MASTER_KEY}
+      EDUGATE_OIDC_AUTH_SERVER_URL: http://keycloak:8080/realms/edugate
+      EDUGATE_FRONTEND_ORIGIN: http://localhost:5173
+    ports:
+      - "8080:8080"
+    networks:
+      - zone-mgmt
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/q/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  gateway:
+    build:
+      context: ./backend
+      dockerfile: edugate-gateway/src/main/docker/Dockerfile.jvm
+    environment:
+      EDUGATE_DB_HOST: postgres
+      EDUGATE_DB_PORT: "5432"
+      EDUGATE_DB_NAME: ${POSTGRES_DB}
+      EDUGATE_GATEWAY_DB_PASSWORD: ${EDUGATE_GATEWAY_DB_PASSWORD}
+      EDUGATE_OIDC_AUTH_SERVER_URL: http://keycloak:8080/realms/edugate
+      EDUGATE_OIDC_GATEWAY_CLIENT_ID: edugate-demo-client
+    ports:
+      - "8081:8081"
+    networks:
+      - zone-gw
+      - zone-mgmt
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/q/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  frontend:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_OIDC_AUTH_SERVER_URL: http://localhost:8180/realms/edugate
+      VITE_OIDC_CLIENT_ID: edugate-frontend
+      VITE_CONTROL_PLANE_API_URL: http://localhost:8080/admin/api/v1
+    ports:
+      - "5173:5173"
+    networks:
+      - zone-mgmt
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    healthcheck:
+      # 127.0.0.1 statt localhost: In diesem Alpine-Image löst "localhost" zuerst auf ::1 auf,
+      # Vite bindet mit --host 0.0.0.0 aber nur IPv4 - wget würde sonst fälschlich "unhealthy" melden.
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:5173"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+
+networks:
+  zone-mgmt:
+    name: edugate-zone-mgmt
+  zone-gw:
+    name: edugate-zone-gw
+  # Zone 4 (SVWS-Zone, ADR-007): in Phase 1 bewusst leer. Spätere SVWS-Testinstanzen docken
+  # hier an, ohne dass Control Plane oder Gateway umgebaut werden müssen.
+  zone-svws:
+    name: edugate-zone-svws
+
+volumes:
+  postgres-data:

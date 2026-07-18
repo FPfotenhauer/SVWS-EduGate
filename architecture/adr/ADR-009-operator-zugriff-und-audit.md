@@ -84,6 +84,19 @@ Pflichtfelder je Eintrag:
 - `SCHULTRAEGER_LIST`-Audits können bei intensiver UI-Nutzung Volumen erzeugen → bewusst in Kauf genommen; Aufbewahrung/Verdichtung wird bei Bedarf in einem eigenen ADR geregelt.
 - Der Fehler-Audit-Pfad in eigener Transaktion kann im Extremfall (z. B. Datenbank nicht erreichbar) selbst fehlschlagen; als Rückfallebene wird der Vorgang zusätzlich im strukturierten Anwendungslog protokolliert.
 
+## Nachtrag (SVWS-Serververwaltung): `svws_instanz` als weiterer Operator-Use-Case
+
+Der Katalog erlaubter Operator-Use-Cases wird um einen vierten, hier explizit benannten Fall
+ergänzt: **Verwaltung von `svws_instanz`** (Anlegen, Bearbeiten, Credentials setzen,
+Deaktivieren, Liste). `svws_instanz` ist gemäß [ADR-011](./ADR-011-svws-instanz-als-geteilte-betriebsressource.md)
+eine mandantenübergreifende Betriebsressource, keine tenant-gebundene Fachtabelle – ihre
+CRUD-Verwaltung läuft daher, analog zur Mandanten-Wurzel `schultraeger`, vollständig über
+`OperatorAccess` statt über den tenant-gebundenen `edugate_control`-Standardpfad. Anders als bei
+`schultraeger` (Wurzel-Policy auf die eigene `id`, ADR-008) erhält `edugate_control` für
+`svws_instanz` gar keine Policy: Der Operator-Pfad ist damit sowohl anwendungsseitig
+(ArchUnit-Test in diesem ADR) als auch datenbankseitig (RLS ohne passende Policy für
+`edugate_control`) der einzig mögliche Zugriffsweg.
+
 ## Verweise
 
-- Issue #3, ADR-002 (präzisiert/teilweise ersetzt), ADR-008 (Policy der Wurzeltabelle), ADR-004 (getrenntes Gateway-Audit), ADR-005 (Token-Identität)
+- Issue #3, ADR-002 (präzisiert/teilweise ersetzt), ADR-008 (Policy der Wurzeltabelle), ADR-004 (getrenntes Gateway-Audit), ADR-005 (Token-Identität), ADR-011 (svws_instanz als geteilte Betriebsressource)

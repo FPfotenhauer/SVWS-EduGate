@@ -1,0 +1,2870 @@
+{
+  "openapi" : "3.0.1",
+  "info" : {
+    "title" : "SVWS Open-API Datenbank-Schema (root)",
+    "description" : "Die Open-API-Schnittstellenbeschreibungen für die Schemaverwaltung (root) des SVWS-Servers.",
+    "license" : {
+      "name" : "Apache 2.0",
+      "url" : "https://www.apache.org/licenses/LICENSE-2.0.html"
+    },
+    "version" : "1.4.0-SNAPSHOT"
+  },
+  "security" : [ {
+    "basicAuth" : [ ]
+  } ],
+  "paths" : {
+    "/api/privileged/config/privatekey_cert_base64/{alias}/create" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Erstellt einen neuen Private-Key und ein dazugehöriges selbst-signiertes Zertifikat für die TLS-Konfiguration.",
+        "description" : "Erstellt einen neuen Private-Key und ein dazugehöriges selbst-signiertes Zertifikat für die TLS-Konfiguration.",
+        "operationId" : "createConfigPrivateKeySelfSignedCertificate",
+        "parameters" : [ {
+          "name" : "alias",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Der Distinguished Name (DN) und die SAN-Einträge für das Zertifikat",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TLSCertificateInfo"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "Das Erzeugen des privaten Schlüssels und des Zertifikats war erfolgreich."
+          },
+          "400" : {
+            "description" : "Es ist ein Fehler beim Erzeugen aufgetreten."
+          },
+          "403" : {
+            "description" : "Der Benutzer hat keine Berechtigung, um die TLS-Zertifikatsinformationen zu setzen."
+          }
+        }
+      }
+    },
+    "/api/privileged/user/isprivileged" : {
+      "get" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Liefert die Information, ob der angemeldete Benutzer ein priviligierter Benutzer mit Rechten zur Anpassung der SVWS-Konfiguration ist.",
+        "description" : "Liefert die Information, ob der angemeldete Benutzer ein priviligierter Benutzer mit Rechten zur Anpassung der SVWS-Konfiguration ist.",
+        "operationId" : "isPrivilegedUser",
+        "responses" : {
+          "200" : {
+            "description" : "true, wenn der Benutzer die Rechte hat",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "boolean"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Der angegebene Benutzer besitzt nicht die Rechte, um auf die priviligierte API zuzugreifen"
+          }
+        }
+      }
+    },
+    "/api/privileged/config/schema/{schema}/remove" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Entfernt das bestehende Schema mit dem angegebenen Namen aus der SVWS-Konfiguration.",
+        "description" : "Entfernt das bestehende Schema mit dem angegebenen Namen aus der SVWS-Konfiguration, falls es existiert und der angemeldete Benutzer die benötigten Rechte besitzt.",
+        "operationId" : "removeSchemaFromConfig",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "Das Schema wurde erfolgreich aus der Konfiguration entfernt."
+          },
+          "400" : {
+            "description" : "Der Schema-Name darf nicht null oder leer sein."
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht gelöscht werden."
+          },
+          "404" : {
+            "description" : "Das angegebene Schema wurde nicht gefunden."
+          }
+        }
+      }
+    },
+    "/api/privileged/config/privatekey_cert_base64/{alias}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Importiert den Private-Key und das Zertifikat im Base 64-Formate für die TLS-Konfiguration.",
+        "description" : "Importiert den Private-Key und das Zertifikat im Base 64-Formate für die TLS-Konfiguration.",
+        "operationId" : "setConfigPrivateKeyCertificateBase64",
+        "parameters" : [ {
+          "name" : "alias",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Das Zertifikat und der private Schlüssel, jeweils im Base64-Format",
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PrivateKeyCertificateMultipartBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "Der Import des privaten Schlüssels und des Zertifikats war erfolgreich."
+          },
+          "400" : {
+            "description" : "Es ist ein Fehler beim Import aufgetreten."
+          },
+          "403" : {
+            "description" : "Der Benutzer hat keine Berechtigung, um die TLS-Zertifikatsinformationen zu setzen."
+          }
+        }
+      }
+    },
+    "/api/privileged/config/default/schema/{schema}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Setze das angegebene Schema als Default-Schema, sofern es in der SVWS-Konfiguration eingetragen ist.",
+        "description" : "Setze das angegebene Schema als Default-Schema, sofern es in der SVWS-Konfiguration eingetragen ist und der angemeldete Benutzer die benötigten Rechte besitzt.",
+        "operationId" : "setDefaultSchemaInConfig",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "Das Schema wurde erfolgreich als Default-Schema gesetzt."
+          },
+          "400" : {
+            "description" : "Der Schema-Name darf nicht null oder leer sein."
+          },
+          "403" : {
+            "description" : "Das Default-Schema darf nicht gesetzt werden."
+          },
+          "404" : {
+            "description" : "Das angegebene Schema wurde nicht gefunden."
+          }
+        }
+      }
+    },
+    "/api/privileged/config/default/schema" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Setzt Default-Schema zurück.",
+        "description" : "Setzt Default-Schema zurück, sofern der angemeldete Benutzer die benötigten Rechte besitzt.",
+        "operationId" : "unsetDefaultSchemaInConfig",
+        "responses" : {
+          "204" : {
+            "description" : "Das Default-Schema wurde zuürckgesetzt."
+          },
+          "403" : {
+            "description" : "Das Default-Schema darf nicht zurückgesetzt werden."
+          },
+          "404" : {
+            "description" : "Die Konfiguration wurde nicht gefunden."
+          }
+        }
+      }
+    },
+    "/api/schema/root/user/checkpwd" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Prüft, ob das übergebene Kennwort für den Datenbankbenutzer gültig ist.",
+        "description" : "Prüft, ob das übergebene Kennwort für den Datenbankbenutzer gültig ist. Zur Prüfung werden root-Rechte auf der Datenbank benötigt",
+        "operationId" : "checkDBPassword",
+        "requestBody" : {
+          "description" : "Der Benutzername und das Kennwort für den Datenbankbenutzer",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/BenutzerKennwort"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "true, wenn das Kennwort und der Benutzername korrekt sind und den Zugriff auf die Datenbankschema erlauben.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "boolean"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Der angegebene Benutzer besitzt nicht die Rechte, um die Schema-Liste der Datenbank auszulesen. Hierfür werden root-Rechte benötigt"
+          }
+        }
+      }
+    },
+    "/api/schema/root/user/checkrootprivs" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Prüft, ob das übergebene Kennwort für den Datenbankbenutzer gültig ist.",
+        "description" : "Prüft, ob das übergebene Kennwort für den Datenbankbenutzer gültig ist. Zur Prüfung werden root-Rechte auf der Datenbank benötigt",
+        "operationId" : "checkDBPrivPassword",
+        "requestBody" : {
+          "description" : "Der Benutzername und das Kennwort für den Datenbankbenutzer",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/BenutzerKennwort"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "true, wenn das Kennwort und der Benutzername korrekt sind und der priviligierte Zugriff auf die Datenbank erlaubt.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "boolean"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Der angegebene Benutzer besitzt nicht die Rechte, um die Schema-Liste der Datenbank auszulesen. Hierfür werden root-Rechte benötigt"
+          }
+        }
+      }
+    },
+    "/api/schema/root/create/{schema}/{revision}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Erstellt ein neues Schema der angegebenen Revision und dem angegebenen Namen.",
+        "description" : "Erstellt ein neues Schema der angegebenen Revision und dem angegebenen Namen, falls keine Schema mit dem angebenen Namen bereits existiert.",
+        "operationId" : "createSchema",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        }, {
+          "name" : "revision",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Der Benutzername und das Kennwort für den administrativen Zugang zum Schema",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/BenutzerKennwort"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Anlegen des Schemas",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Es wurde ein nicht erlaubter Schema-Name, Benutzername oder eine ungültige Revision angegeben."
+          },
+          "403" : {
+            "description" : "Der angemeldete Benutzer verfügt nicht über die notwendigen Rechte zum Anlegen eines Schemas."
+          },
+          "404" : {
+            "description" : "Die Schema-Datenbank konnte nicht geladen werden. Die Server-Konfiguration ist fehlerhaft."
+          },
+          "500" : {
+            "description" : "Der Datenbankzugriff auf das neue Schema mit dem neuen zugehörigen Admin-Benutzer ist fehlgeschlagen oder das SVWS-Schema mit der Revision konnte nicht angelegt werden.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/root/create/{schema}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Erstellt ein neues Schema der aktuellen Revision mit dem angegebenen Namen.",
+        "description" : "Erstellt ein neues Schema der aktuellen Revision mit dem angegebenen Namen, falls keines mit dem angebenen Namen bereits existiert.",
+        "operationId" : "createSchemaCurrent",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Der Benutzername und das Kennwort für den administrativen Zugang zum Schema",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/BenutzerKennwort"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Anlegen des Schemas",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Es wurde ein nicht erlaubter Schema-Name oder Benutzername angegeben."
+          },
+          "403" : {
+            "description" : "Der angemeldete Benutzer verfügt nicht über die notwendigen Rechte zum Anlegen eines Schemas."
+          },
+          "404" : {
+            "description" : "Die Schema-Datenbank konnte nicht geladen werden. Die Server-Konfiguration ist fehlerhaft."
+          },
+          "500" : {
+            "description" : "Der Datenbankzugriff auf das neue Schema mit dem neuen zugehörigen Admin-Benutzer ist fehlgeschlagen oder das SVWS-Schema mit der aktuellen Revision konnte nicht angelegt werden."
+          }
+        }
+      }
+    },
+    "/api/schema/create/{schema}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Erstellt ein neues leeres SVWS-Schema der aktuellen Revision in dem angegebenen existierenden Schema.",
+        "description" : "Erstellt ein neues leeres SVWS-Schema der aktuellen Revision in dem angegebenen existierenden Schema.",
+        "operationId" : "createSchemaCurrentInto",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Anlegen des Schemas",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Der angemeldete Benutzer verfügt nicht über die notwendigen Rechte zum Anlegen eines Schemas."
+          },
+          "404" : {
+            "description" : "Die Schema-Datenbank konnte nicht geladen werden. Die Server-Konfiguration ist fehlerhaft."
+          },
+          "500" : {
+            "description" : "Der Datenbankzugriff auf das neue Schema mit dem neuen zugehörigen Admin-Benutzer ist fehlgeschlagen oder das SVWS-Schema mit der aktuellen Revision konnte nicht angelegt werden."
+          }
+        }
+      }
+    },
+    "/api/schema/create/{schema}/{revision}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Erstellt ein neues leeres SVWS-Schema der angegebenen Revision in dem angegebenen existierenden Schema.",
+        "description" : "Erstellt ein neues leeres SVWS-Schema der angegebenen Revision in dem angegebenen existierenden Schema.",
+        "operationId" : "createSchemaInto",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        }, {
+          "name" : "revision",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Anlegen des Schemas",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Es wurde eine ungültige Revision angegeben."
+          },
+          "403" : {
+            "description" : "Der angemeldete Benutzer verfügt nicht über die notwendigen Rechte zum Anlegen eines Schemas."
+          },
+          "404" : {
+            "description" : "Die Schema-Datenbank konnte nicht geladen werden. Die Server-Konfiguration ist fehlerhaft."
+          },
+          "500" : {
+            "description" : "Der Datenbankzugriff auf das neue Schema mit dem neuen zugehörigen Admin-Benutzer ist fehlgeschlagen oder das SVWS-Schema mit der Revision konnte nicht angelegt werden.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/root/schema/{schema}/deactivated/{state}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Setzt das Flag, ob das Schema mit dem angegebenen Namen in der SVWS-Konfiguration deaktiviert ist.",
+        "description" : "Setzt das Flag, ob das Schema mit dem angegebenen Namen in der SVWS-Konfiguration deaktiviert ist, der angemeldete Benutzer die benötigten Rechte besitzt.",
+        "operationId" : "deactivateSchema",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        }, {
+          "name" : "state",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "Das Flags des Schemas wurde erfolgreich angepasst."
+          },
+          "400" : {
+            "description" : "Der Schema-Name darf nicht null oder leer sein."
+          },
+          "403" : {
+            "description" : "Das Flag des Schemas darf nicht angepasst werden."
+          }
+        }
+      }
+    },
+    "/api/schema/root/destroy/{schema}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Entfernt das bestehende Schema mit dem angegebenen Namen.",
+        "description" : "Entfernt das Schema mit dem angegebenen Namen, falls es existiert.",
+        "operationId" : "destroySchema",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "Der Log vom Löschen des Schemas"
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht gelöscht werden."
+          },
+          "404" : {
+            "description" : "Das angegebene Schema wurde nicht gefunden."
+          }
+        }
+      }
+    },
+    "/api/schema/root/exists/{schema}" : {
+      "get" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Liefert die Information, ob ein Schema existiert.",
+        "description" : "Liefert die Information, ob ein Schema existiert. Hierfür werden root-Rechte auf der Datenbank benötigt.",
+        "operationId" : "existsSchema",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "true, wenn das Schema existiert",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "boolean"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Der angegebene Benutzer besitzt nicht die Rechte, um die Schema-Liste der Datenbank auszulesen. Hierfür werden root-Rechte benötigt"
+          }
+        }
+      }
+    },
+    "/api/schema/root/user/{user}/exists" : {
+      "get" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Liefert die Information, ob ein DBMS-User existiert.",
+        "description" : "Liefert die Information, ob ein DBMS-User existiert. Hierfür werden root-Rechte auf der Datenbank benötigt.",
+        "operationId" : "existsUser",
+        "parameters" : [ {
+          "name" : "user",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "true, wenn der Benutzer existiert",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "boolean"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Der angegebene Benutzer besitzt nicht die Rechte, um die Schema-Liste der Datenbank auszulesen. Hierfür werden root-Rechte benötigt"
+          }
+        }
+      }
+    },
+    "/api/schema/export/{schema}/sqlite" : {
+      "get" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Exportiert das angegebene Schema in eine neu erstellte SQLite-Datenbank.",
+        "description" : "Exportiert das angegebene Schema in eine neu erstellte SQLite-Datenbank. Der Aufruf erfordert einen Datenbank-Benutzer mit den entsprechenden Rechten.",
+        "operationId" : "exportSQLiteFrom",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Der Export der SQLite-Datenbank",
+            "content" : {
+              "application/vnd.sqlite3" : {
+                "schema" : {
+                  "type" : "string",
+                  "description" : "Die SQLite-Datei",
+                  "format" : "binary"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht exportiert werden."
+          }
+        }
+      }
+    },
+    "/api/schema/export/{schema}/zip" : {
+      "get" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Exportiert das angegebene Schema in eine ZIP-Datei.",
+        "description" : "Exportiert das angegebene Schema in eine ZIP-Datei. Der Aufruf erfordert einen Datenbank-Benutzer mit den entsprechenden Rechten.",
+        "operationId" : "exportZipFrom",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Der Export der ZIP-Datei der SQLite-Datenbank",
+            "content" : {
+              "application/zip" : {
+                "schema" : {
+                  "type" : "string",
+                  "description" : "Die ZIP-Datei",
+                  "format" : "binary"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht exportiert werden."
+          }
+        }
+      }
+    },
+    "/api/schema/liste/kataloge/schulen" : {
+      "get" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Erstellt eine Liste aller in dem Katalog vorhandenen Schulen.",
+        "description" : "Erstellt eine Liste aller in dem Katalog vorhandenen Schulen.",
+        "operationId" : "getAllgemeinenKatalogSchulen",
+        "responses" : {
+          "200" : {
+            "description" : "Eine Liste von Schulen-Katalog-Einträgen",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/SchulenKatalogEintrag"
+                  }
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Der angegebene Benutzer besitzt nicht die Rechte, um den Katalog anzusehen."
+          },
+          "404" : {
+            "description" : "Keine Schulen-Katalog-Einträge gefunden"
+          }
+        }
+      }
+    },
+    "/api/schema/liste/svws" : {
+      "get" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Liefert eine Liste der SVWS-Schemata.",
+        "description" : "Liefert eine Liste der SVWS-Schemata. Hierfür werden root-Rechte auf der Datenbank benötigt.",
+        "operationId" : "getSVWSSchemaListe",
+        "responses" : {
+          "200" : {
+            "description" : "Die Schema-Liste mit den Namen und den Versionsinformationen der Schemata",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/SchemaListeEintrag"
+                  }
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Der angegebene Benutzer besitzt nicht die Rechte, um die SVWS-Schema-Liste der Datenbank auszulesen. Hierfür werden root-Rechte benötigt"
+          }
+        }
+      }
+    },
+    "/api/schema/liste/info/{schema}/admins" : {
+      "get" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Liefert die Informationen zu den administrativen Benutzern in einem aktuellen SVWS-Schema.",
+        "description" : "Liefert die Informationen zu den administrativen Benutzern in einem aktuellen SVWS-Schema.",
+        "operationId" : "getSchemaAdmins",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Die Informationen zu den administrativen Benutzern",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/BenutzerListeEintrag"
+                  }
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Das angegebene Schema ist kein aktuelles SVWS-Schema"
+          },
+          "403" : {
+            "description" : "Der angegebene Benutzer besitzt nicht die Rechte, um die Schul-Informationen abzufragen."
+          }
+        }
+      }
+    },
+    "/api/schema/liste/alle" : {
+      "get" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Liefert eine Liste der Schems.",
+        "description" : "Liefert eine Liste der Schemas. Hierfür werden root-Rechte auf der Datenbank benötigt.",
+        "operationId" : "getSchemaListe",
+        "responses" : {
+          "200" : {
+            "description" : "Die Liste mit allen sichtbaren Schemas in der Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/SchemaListeEintrag"
+                  }
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Der angegebene Benutzer besitzt nicht die Rechte, um die Schema-Liste der Datenbank auszulesen. Hierfür werden root-Rechte benötigt"
+          }
+        }
+      }
+    },
+    "/api/schema/liste/info/{schema}/schule" : {
+      "get" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Liefert die Informationen zu einer Schule eines SVWS-Schema.",
+        "description" : "Liefert die Informationen zu einer Schule eines SVWS-Schema. Hierfür werden Datenbank-Rechte auf dem Schema benötigt.",
+        "operationId" : "getSchuleInfo",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Die Informationen zur Schule",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SchuleInfo"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Das angegebene Schema ist kein SVWS-Schema"
+          },
+          "403" : {
+            "description" : "Der angegebene Benutzer besitzt nicht die Rechte, um die Schul-Informationen abzufragen."
+          },
+          "404" : {
+            "description" : "Es wurden keine Schul-Informationen in dem SVWS-Schema gefunden."
+          }
+        }
+      }
+    },
+    "/api/schema/root/import/existing/{schema}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Fügt ein bestehendes SVWS-Schema zu der SVWS-Konfiguration hinzu.",
+        "description" : "Fügt ein bestehendes SVWS-Schema zu der SVWS-Konfiguration hinzu.Dabei wird geprüft, ob der SVWS-Benutzer die notwendige Berechtigung zum Hinzufügen besitzt.",
+        "operationId" : "importExistingSchema",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Der Benutzername und das Kennwort für den DB-Zugriff auf das Schema",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/BenutzerKennwort"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "204" : {
+            "description" : "Das Schema wurde erfolgreich hinzugefügt"
+          },
+          "403" : {
+            "description" : "Der SVWS-Benutzer hat keine Rechte, um das Schema hinzuzufügen oder der angegebene Benutzer hat nicht ausreichend Rechte, um auf das Schema zuzugreifen."
+          },
+          "404" : {
+            "description" : "Keine Schema mit dem angebenen Namen gefunden"
+          },
+          "500" : {
+            "description" : "Unspezifizierter Fehler (z.B. beim Datenbankzugriff)"
+          }
+        }
+      }
+    },
+    "/api/schema/root/import/sqlite/{schema}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Importiert die übergebene SQLite-Datenbank in das Schema mit dem angegebenen Namen.",
+        "description" : "Importiert die übergebene SQLite-Datenbank in das Schema mit dem angegebenen Namen. Sollte ein Schema mit dem Namen bereits bestehen, so wird es ersetzt.",
+        "operationId" : "importSQLite2Schema",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die SQLite-Datei",
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DBMultipartBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Import der SQLite-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht importiert werden."
+          },
+          "500" : {
+            "description" : "Fehler bei dem Import der SQLite-Datenbank mit dem Log des fehlgeschlagenen Imports.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/import/{schema}/sqlite" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Importiert die übergebene Datenbank in dieses Schema.",
+        "description" : "Importiert die übergebene Datenbank in dieses Schema. Das Schema wird dabei zunächst geleert und vorhanden Daten gehen dabei verloren.",
+        "operationId" : "importSQLiteInto",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die SQLite-Datenbank-Datei",
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DBMultipartBodyDataOnly"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Importieren der SQLite-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "Fehler beim Importieren mit dem Log des fehlgeschlagenen Imports.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "In das Schema darf nicht importiert werden."
+          }
+        }
+      }
+    },
+    "/api/schema/create/{schema}/init/{schulnummer}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Legt die Daten für eine neue Schule in einem SVWS-Schema an und gibt anschließend die Schulstammdaten zurück.",
+        "description" : "Legt die Daten für eine neue Schule in einem SVWS-Schema an und gibt anschließend die Schulstammdaten zurück.Dabei wird geprüft, ob der SVWS-Benutzer die notwendige Berechtigung zum Anlegen der Schule besitzt.",
+        "operationId" : "initSchemaMitSchule",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        }, {
+          "name" : "schulnummer",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Die Schule wurde erfolgreich angelegt.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SchuleStammdaten"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Der SVWS-Benutzer hat keine Rechte, um die Schule anzulegen."
+          },
+          "404" : {
+            "description" : "Keine Schule mit der angegebenen Schulnummer gefunden"
+          },
+          "409" : {
+            "description" : "Fehlerhaft, da zumindest eine Rahmenbedingung für einen Wert nicht erfüllt wurde, dies ist z.B. der Fall, falls zuvor schon eine Schule angelegt wurde."
+          },
+          "500" : {
+            "description" : "Unspezifizierter Fehler (z.B. beim Datenbankzugriff)"
+          }
+        }
+      }
+    },
+    "/api/schema/root/migrate/mdb/{schema}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen.",
+        "description" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen. Sollte ein Schema mit dem Namen bereits bestehen, so wird es ersetzt.",
+        "operationId" : "migrateMDB2Schema",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die MDB-Datei",
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DBMultipartBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Migrieren der Access-MDB-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "Fehler bei der Migration mit dem Log der fehlgeschlagenen Migration.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht migriert werden."
+          }
+        }
+      }
+    },
+    "/api/schema/root/migrate/mdb/{schema}/v2" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen.",
+        "description" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen. Sollte ein Schema mit dem Namen bereits bestehen, so wird es ersetzt. Es wird ein Framed Octet-Stream mit Metadaten bestehend aus einem 4 Byte Längenpräfix (BigEndian) und eine JSON-String dieser Länge verwendet.",
+        "operationId" : "migrateMDB2SchemaFramedPayload",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die MDB-Datei",
+          "content" : {
+            "application/octet-stream" : {
+              "schema" : {
+                "type" : "string",
+                "format" : "binary"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Migrieren der Access-MDB-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "Fehler bei der Migration mit dem Log der fehlgeschlagenen Migration.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht migriert werden.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "413" : {
+            "description" : "Die hochgeladene Datei ist zu groß und überschreitet das Limit.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/migrate/{schema}/mdb" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Migriert die übergebene Datenbank in das angegebene Schema.",
+        "description" : "Migriert die übergebene Datenbank in das angegebene Schema. Das Schema wird dabei geleert und vorhanden Daten gehen dabei verloren.",
+        "operationId" : "migrateMDBInto",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die MDB-Datei",
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DBMultipartBodyDataOnly"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Migrieren der Access-MDB-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "Fehler bei der Migration mit dem Log der fehlgeschlagenen Migration.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht migriert werden."
+          }
+        }
+      }
+    },
+    "/api/schema/migrate/{schema}/mdb/v2" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Migriert die übergebene Datenbank in das angegebene Schema.",
+        "description" : "Migriert die übergebene Datenbank in das angegebene Schema. Das Schema wird dabei geleert und vorhanden Daten gehen dabei verloren. Es wird ein Octet-Stream verwendet.",
+        "operationId" : "migrateMDBIntoPayload",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die MDB-Datei",
+          "content" : {
+            "application/octet-stream" : {
+              "schema" : {
+                "type" : "string",
+                "format" : "binary"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Migrieren der Access-MDB-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "Fehler bei der Migration mit dem Log der fehlgeschlagenen Migration.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht migriert werden.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "413" : {
+            "description" : "Die hochgeladene Datei ist zu groß und überschreitet das Limit.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/root/migrate/mssql/{schema}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen.",
+        "description" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen. Sollte ein Schema mit dem Namen bereits bestehen, so wird es ersetzt.",
+        "operationId" : "migrateMSSQL2Schema",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die Informationen zum Zugriff auf die Quell- und Zieldatenbank bei der Migration",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/MigrateBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Migrieren der MS-SQL-Server-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht migriert werden."
+          },
+          "500" : {
+            "description" : "Fehler bei der Migration mit dem Log der fehlgeschlagenen Migration.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/root/migrate/mssql/{schema}/{schulnummer}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen.",
+        "description" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen. Sollte ein Schema mit dem Namen bereits bestehen, so wird es ersetzt.",
+        "operationId" : "migrateMSSQL2SchemaSchulnummer",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        }, {
+          "name" : "schulnummer",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die Informationen zum Zugriff auf die Quell- und Zieldatenbank bei der Migration",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/MigrateBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Migrieren der MS-SQL-Server-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht migriert werden."
+          },
+          "500" : {
+            "description" : "Fehler bei der Migration mit dem Log der fehlgeschlagenen Migration.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/root/migrate/mariadb/{schema}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen.",
+        "description" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen. Sollte ein Schema mit dem Namen bereits bestehen, so wird es ersetzt.",
+        "operationId" : "migrateMariaDB2Schema",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die Informationen zum Zugriff auf die Quell- und Zieldatenbank bei der Migration",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/MigrateBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Migrieren der MariaDB-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht migriert werden."
+          },
+          "500" : {
+            "description" : "Fehler bei der Migration mit dem Log der fehlgeschlagenen Migration.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/root/migrate/mariadb/{schema}/{schulnummer}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen.",
+        "description" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen. Sollte ein Schema mit dem Namen bereits bestehen, so wird es ersetzt.",
+        "operationId" : "migrateMariaDB2SchemaSchulnummer",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        }, {
+          "name" : "schulnummer",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die Informationen zum Zugriff auf die Quell- und Zieldatenbank bei der Migration",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/MigrateBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Migrieren der MariaDB-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht migriert werden."
+          },
+          "500" : {
+            "description" : "Fehler bei der Migration mit dem Log der fehlgeschlagenen Migration.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/migrate/{schema}/mariadb" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen.",
+        "description" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen. Die Daten in diesem Schema werden ersetzt.",
+        "operationId" : "migrateMariaDBInto",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die Informationen zum Zugriff auf die Quell- und Zieldatenbank bei der Migration",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DatenbankVerbindungsdaten"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Migrieren der MariaDB-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht migriert werden."
+          },
+          "500" : {
+            "description" : "Fehler bei der Migration mit dem Log der fehlgeschlagenen Migration.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/migrate/{schema}/mariadb/{schulnummer}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Migriert die Daten für die übergebene Schulnummer aus der übergebenen Datenbank in das Schema mit dem angegebenen Namen.",
+        "description" : "Migriert die Daten für die übergebene Schulnummer aus der übergebenen Datenbank in das Schema mit dem angegebenen Namen. Die Daten in diesem Schema werden ersetzt.",
+        "operationId" : "migrateMariaDBSchulnummerInto",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        }, {
+          "name" : "schulnummer",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die Informationen zum Zugriff auf die Quell- und Zieldatenbank bei der Migration",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DatenbankVerbindungsdaten"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Migrieren der MariaDB-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht migriert werden."
+          },
+          "500" : {
+            "description" : "Fehler bei der Migration mit dem Log der fehlgeschlagenen Migration.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/migrate/{schema}/mssql" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen.",
+        "description" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen. Die Daten in diesem Schema werden ersetzt.",
+        "operationId" : "migrateMsSqlServerInto",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die Informationen zum Zugriff auf die Quell- und Zieldatenbank bei der Migration",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DatenbankVerbindungsdaten"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Migrieren der SQL-Server-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht migriert werden."
+          },
+          "500" : {
+            "description" : "Fehler bei der Migration mit dem Log der fehlgeschlagenen Migration.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/migrate/{schema}/mssql/{schulnummer}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Migriert die Daten für die übergebene Schulnummer aus der übergebenen Datenbank in das Schema mit dem angegebenen Namen.",
+        "description" : "Migriert die Daten für die übergebene Schulnummer aus der übergebenen Datenbank in das Schema mit dem angegebenen Namen. Die Daten in diesem Schema werden ersetzt.",
+        "operationId" : "migrateMsSqlServerSchulnummerInto",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        }, {
+          "name" : "schulnummer",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die Informationen zum Zugriff auf die Quell- und Zieldatenbank bei der Migration",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DatenbankVerbindungsdaten"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Migrieren der SQL-Server-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht migriert werden."
+          },
+          "500" : {
+            "description" : "Fehler bei der Migration mit dem Log der fehlgeschlagenen Migration.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/root/migrate/mysql/{schema}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen.",
+        "description" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen. Sollte ein Schema mit dem Namen bereits bestehen, so wird es ersetzt.",
+        "operationId" : "migrateMySQL2Schema",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die Informationen zum Zugriff auf die Quell- und Zieldatenbank bei der Migration",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/MigrateBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Migrieren der MySQL-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht migriert werden."
+          },
+          "500" : {
+            "description" : "Fehler bei der Migration mit dem Log der fehlgeschlagenen Migration.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/root/migrate/mysql/{schema}/{schulnummer}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen.",
+        "description" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen. Sollte ein Schema mit dem Namen bereits bestehen, so wird es ersetzt.",
+        "operationId" : "migrateMySQL2SchemaSchulnummer",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        }, {
+          "name" : "schulnummer",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die Informationen zum Zugriff auf die Quell- und Zieldatenbank bei der Migration",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/MigrateBody"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Migrieren der MySQL-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht migriert werden."
+          },
+          "500" : {
+            "description" : "Fehler bei der Migration mit dem Log der fehlgeschlagenen Migration.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/migrate/{schema}/mysql" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen.",
+        "description" : "Migriert die übergebene Datenbank in das Schema mit dem angegebenen Namen. Die Daten in diesem Schema werden ersetzt.",
+        "operationId" : "migrateMySqlInto",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die Informationen zum Zugriff auf die Quell- und Zieldatenbank bei der Migration",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DatenbankVerbindungsdaten"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Migrieren der MySQL-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht migriert werden."
+          },
+          "500" : {
+            "description" : "Fehler bei der Migration mit dem Log der fehlgeschlagenen Migration.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/migrate/{schema}/mysql/{schulnummer}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Migriert die Daten für die übergebene Schulnummer aus der übergebenen Datenbank in das Schema mit dem angegebenen Namen.",
+        "description" : "Migriert die Daten für die übergebene Schulnummer aus der übergebenen Datenbank in das Schema mit dem angegebenen Namen. Die Daten in diesem Schema werden ersetzt.",
+        "operationId" : "migrateMySqlSchulnummerInto",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        }, {
+          "name" : "schulnummer",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "Die Informationen zum Zugriff auf die Quell- und Zieldatenbank bei der Migration",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DatenbankVerbindungsdaten"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Migrieren der MySQL-Datenbank",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Das Schema darf nicht migriert werden."
+          },
+          "500" : {
+            "description" : "Fehler bei der Migration mit dem Log der fehlgeschlagenen Migration.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/update/{schema}/{revision}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Aktualisiert das angegebene Schema auf die angegebene Revision.",
+        "description" : "Prüft das Schema bezüglich der aktuellen Revision und aktualisiert das Schema ggf. auf die übergebene Revision, sofern diese in der Schema-Definition existiert.",
+        "operationId" : "updateSchema",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        }, {
+          "name" : "revision",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Verlauf des Updates",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Es wurde ein ungültiger Schema-Name oder eine ungültige Revision angegeben.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Die Schema-Datenbank konnte nicht geladen werden. Die Server-Konfiguration ist fehlerhaft.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "Es ist ein interner-Server-Fehler aufgetreten.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schema/update/{schema}" : {
+      "post" : {
+        "tags" : [ "Privileged" ],
+        "summary" : "Aktualisiert das angegebene Schema auf die neueste Revision.",
+        "description" : "Prüft das Schema bezüglich der aktuellen Revision und aktualisiert das Schema ggf. auf die neueste Revision.",
+        "operationId" : "updateSchemaToCurrent",
+        "parameters" : [ {
+          "name" : "schema",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Der Log vom Verlauf des Updates",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Es wurde ein ungültiger Schema-Name oder eine ungültige Revision angegeben.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Die Schema-Datenbank konnte nicht geladen werden. Die Server-Konfiguration ist fehlerhaft.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "Es ist ein interner-Server-Fehler aufgetreten.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Einfache-Operation-Antwort"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "TLSCertificateInfo" : {
+        "required" : [ "dn", "sans" ],
+        "type" : "object",
+        "properties" : {
+          "dn" : {
+            "type" : "string",
+            "description" : "Der Distinguished Name (DN)"
+          },
+          "sans" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        },
+        "description" : "Die Informationen für das Erstellen eines TLS-Zertifikats.",
+        "nullable" : true
+      },
+      "PrivateKeyCertificateMultipartBody" : {
+        "type" : "object",
+        "properties" : {
+          "key" : {
+            "type" : "string",
+            "description" : "Der private Schlüssel",
+            "format" : "binary",
+            "nullable" : true
+          },
+          "certificate" : {
+            "type" : "string",
+            "description" : "Das Zertifikat",
+            "format" : "binary",
+            "nullable" : true
+          }
+        }
+      },
+      "BenutzerKennwort" : {
+        "type" : "object",
+        "properties" : {
+          "user" : {
+            "type" : "string",
+            "description" : "Der Benutzername.",
+            "nullable" : true,
+            "example" : "vip"
+          },
+          "password" : {
+            "type" : "string",
+            "description" : "Das Kennwort des Benutzers.",
+            "nullable" : true,
+            "example" : "geheim"
+          }
+        },
+        "description" : "Der Benutzername und das Kennwort eines Benutzers.",
+        "nullable" : true
+      },
+      "Einfache-Operation-Antwort" : {
+        "required" : [ "log" ],
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "description" : "ID des zugehörigen Objektes.",
+            "format" : "int64",
+            "nullable" : true,
+            "example" : 11
+          },
+          "success" : {
+            "type" : "boolean",
+            "description" : "Gibt an, ob die Operation erfolgreich war.",
+            "example" : true
+          },
+          "log" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        },
+        "description" : "die Antwort bei einer Operation mit dem Log der Operation.",
+        "nullable" : true,
+        "xml" : {
+          "name" : "SimpleOperationResponse"
+        }
+      },
+      "SchulenKatalogEintrag" : {
+        "required" : [ "SchulNr" ],
+        "type" : "object",
+        "properties" : {
+          "SchulNr" : {
+            "type" : "string",
+            "description" : "die Schulnummer",
+            "example" : "100001"
+          },
+          "RegSchl" : {
+            "type" : "string",
+            "description" : "Regionalschlüssel der Schule",
+            "nullable" : true
+          },
+          "KoRe" : {
+            "type" : "number",
+            "description" : "Feld KoRe",
+            "format" : "double"
+          },
+          "KoHo" : {
+            "type" : "number",
+            "description" : "Feld KoHo",
+            "format" : "double"
+          },
+          "ABez1" : {
+            "type" : "string",
+            "description" : "Bezeichnung 1 der Schule",
+            "nullable" : true
+          },
+          "ABez2" : {
+            "type" : "string",
+            "description" : "Bezeichnung 2 der Schule",
+            "nullable" : true
+          },
+          "ABez3" : {
+            "type" : "string",
+            "description" : "Bezeichnung 3 der Schule",
+            "nullable" : true
+          },
+          "PLZ" : {
+            "type" : "string",
+            "description" : "Postleitzahl der Schule",
+            "nullable" : true
+          },
+          "Ort" : {
+            "type" : "string",
+            "description" : "Ort der Schule",
+            "nullable" : true
+          },
+          "Strasse" : {
+            "type" : "string",
+            "description" : "Straße der Schule",
+            "nullable" : true
+          },
+          "TelVorw" : {
+            "type" : "string",
+            "description" : "Telefonvorwahl der Schule",
+            "nullable" : true
+          },
+          "Telefon" : {
+            "type" : "string",
+            "description" : "Telefonnummer der Schule",
+            "nullable" : true
+          },
+          "FaxVorw" : {
+            "type" : "string",
+            "description" : "Faxvorwahl der Schule",
+            "nullable" : true
+          },
+          "Fax" : {
+            "type" : "string",
+            "description" : "Faxnummer der Schule",
+            "nullable" : true
+          },
+          "ModemVorw" : {
+            "type" : "string",
+            "description" : "Modemvorwahl der Schule",
+            "nullable" : true
+          },
+          "Modem" : {
+            "type" : "string",
+            "description" : "Modem-Telefonnummer der Schule",
+            "nullable" : true
+          },
+          "SF" : {
+            "type" : "string",
+            "description" : "Schulform der Schule",
+            "nullable" : true
+          },
+          "OeffPri" : {
+            "type" : "string",
+            "description" : "OeffPri",
+            "nullable" : true
+          },
+          "KurzBez" : {
+            "type" : "string",
+            "description" : "Kurzbezeichnung der Schule",
+            "nullable" : true
+          },
+          "SchBetrSchl" : {
+            "type" : "integer",
+            "description" : "Schulbetriebsschlüssel der Schule",
+            "format" : "int32",
+            "nullable" : true
+          },
+          "SchBetrSchlDatum" : {
+            "type" : "string",
+            "description" : "Datum des Schulbetriensschlüssels der Schule",
+            "nullable" : true
+          },
+          "ArtDerTraegerschaft" : {
+            "type" : "string",
+            "description" : "Art der Trägerschaft der Schule",
+            "nullable" : true
+          },
+          "SchultraegerNr" : {
+            "type" : "string",
+            "description" : "Schulträgernummer der Schule",
+            "nullable" : true
+          },
+          "Schulgliederung" : {
+            "type" : "string",
+            "description" : "Schulgliederung der Schule",
+            "nullable" : true
+          },
+          "Schulart" : {
+            "type" : "string",
+            "description" : "Schulart",
+            "nullable" : true
+          },
+          "Ganztagsbetrieb" : {
+            "type" : "string",
+            "description" : "Gibt an ob die Schule Ganztagsbetrieb hat",
+            "nullable" : true
+          },
+          "FSP" : {
+            "type" : "string",
+            "description" : "Förderschwerpunkte der Schule",
+            "nullable" : true
+          },
+          "Verbund" : {
+            "type" : "string",
+            "description" : "Verbund",
+            "nullable" : true
+          },
+          "Bus" : {
+            "type" : "string",
+            "description" : "Bus",
+            "nullable" : true
+          },
+          "Fachberater" : {
+            "type" : "integer",
+            "description" : "Fachberater der Schule",
+            "format" : "int32",
+            "nullable" : true
+          },
+          "FachberHauptamtl" : {
+            "type" : "integer",
+            "description" : "FachberHauptamtl",
+            "format" : "int32",
+            "nullable" : true
+          },
+          "TelNrDBSalt" : {
+            "type" : "string",
+            "description" : "TelNrDBSalt",
+            "nullable" : true
+          },
+          "RP" : {
+            "type" : "string",
+            "description" : "RP",
+            "nullable" : true
+          },
+          "Email" : {
+            "type" : "string",
+            "description" : "Email-Adresse der Schule",
+            "nullable" : true
+          },
+          "URL" : {
+            "type" : "string",
+            "description" : "Website der Schule",
+            "nullable" : true
+          },
+          "Bemerkung" : {
+            "type" : "string",
+            "description" : "Bemerkung zur Schule",
+            "nullable" : true
+          },
+          "CD" : {
+            "type" : "integer",
+            "description" : "Gibt an ob die Schule eine CD für ASDPC32 möchte",
+            "format" : "int32",
+            "nullable" : true
+          },
+          "Stift" : {
+            "type" : "integer",
+            "description" : "Stift",
+            "format" : "int32",
+            "nullable" : true
+          },
+          "OGTS" : {
+            "type" : "string",
+            "description" : "Gibt an ob die Schule offenen Ganztag hat",
+            "nullable" : true
+          },
+          "SELB" : {
+            "type" : "string",
+            "description" : "SELB",
+            "nullable" : true
+          },
+          "Internat" : {
+            "type" : "string",
+            "description" : "Gibt an ob die Schule Internatsplätze hat",
+            "nullable" : true
+          },
+          "InternatPlaetze" : {
+            "type" : "integer",
+            "description" : "Anzahl der Internatsplätze",
+            "format" : "int32",
+            "nullable" : true
+          },
+          "SMail" : {
+            "type" : "string",
+            "description" : "Schulmailadresse",
+            "nullable" : true
+          },
+          "SportImAbi" : {
+            "type" : "string",
+            "description" : "Hat die Schule Sport im Abitur?",
+            "nullable" : true
+          },
+          "Tal" : {
+            "type" : "string",
+            "description" : "Nimmt die Schule am Projekt Talentschule teil?",
+            "nullable" : true
+          },
+          "KonKop" : {
+            "type" : "string",
+            "description" : "Ist die konfessionelle Kooperation an dieser Schule genehmigt?",
+            "nullable" : true
+          },
+          "gueltigVon" : {
+            "type" : "integer",
+            "description" : "Gibt die Gültigkeit ab welchem Schuljahr an",
+            "format" : "int32",
+            "nullable" : true
+          },
+          "gueltigBis" : {
+            "type" : "integer",
+            "description" : "Gibt die Gültigkeit bis zu welchem Schuljahr an",
+            "format" : "int32",
+            "nullable" : true
+          }
+        },
+        "description" : "ein Eintrag in dem Katalog der Schulen.",
+        "nullable" : true
+      },
+      "SchemaListeEintrag" : {
+        "required" : [ "name", "username" ],
+        "type" : "object",
+        "properties" : {
+          "name" : {
+            "type" : "string",
+            "description" : "der Name des Schemas",
+            "example" : "svwsdb"
+          },
+          "username" : {
+            "type" : "string",
+            "description" : "der Name des Datenbank-Benutzers für das Schema",
+            "example" : "svwsdb"
+          },
+          "isSVWS" : {
+            "type" : "boolean",
+            "description" : "gibt an, ob das Schema ein SVWS-Schema ist oder nicht",
+            "example" : false
+          },
+          "revision" : {
+            "type" : "integer",
+            "description" : "die Revisionsnummer des Schemas",
+            "format" : "int64",
+            "example" : 3
+          },
+          "isTainted" : {
+            "type" : "boolean",
+            "description" : "gibt an, ob das Schema als \"verdorben\" markiert wurde und deswegen nicht mehr für den produktiven Einsatz in der Schule genutzt werden sollte",
+            "example" : false
+          },
+          "isInConfig" : {
+            "type" : "boolean",
+            "description" : "gibt an, ob das Schema in der Konfiguration des aktuellen SVWS-Servers eingetragen ist.",
+            "example" : true
+          },
+          "isDeactivated" : {
+            "type" : "boolean",
+            "description" : "gibt an, ob das Schema in der Konfiguration des aktuellen SVWS-Servers aufgrund von Fehlern deaktiviert ist.",
+            "example" : true
+          }
+        },
+        "description" : "ein Eintrag eines SVWS-Schemas in der SVWS-Schema-Liste.",
+        "nullable" : true
+      },
+      "BenutzerListeEintrag" : {
+        "required" : [ "anzeigename", "idCredentials", "istAdmin", "name", "typ", "typID" ],
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "description" : "die ID des Benutzers",
+            "format" : "int64",
+            "example" : 4711
+          },
+          "typ" : {
+            "type" : "integer",
+            "description" : "der Typ des Benutzers",
+            "format" : "int32",
+            "example" : 0
+          },
+          "typID" : {
+            "type" : "integer",
+            "description" : "die ID des Benutzers in der Typ-spezifischen-Tabelle (z.B. Lehrer-ID)",
+            "format" : "int64",
+            "example" : 4712
+          },
+          "anzeigename" : {
+            "type" : "string",
+            "description" : "der Anzeigename des Benutzers",
+            "example" : "Administrator"
+          },
+          "name" : {
+            "type" : "string",
+            "description" : "der Anmeldename des Benutzers",
+            "example" : "Admin"
+          },
+          "istAdmin" : {
+            "type" : "boolean",
+            "description" : "gibt an, ob es sich um einen Administrativen Benutzer handelt oder nicht.",
+            "example" : true
+          },
+          "idCredentials" : {
+            "type" : "integer",
+            "description" : "die ID der Credentials des Benutzers",
+            "format" : "int64",
+            "example" : 42
+          }
+        },
+        "description" : "ein Eintrag eines Benutzers in der Benutzerliste.",
+        "nullable" : true
+      },
+      "SchuleInfo" : {
+        "required" : [ "bezeichnung", "schulform" ],
+        "type" : "object",
+        "properties" : {
+          "schulNr" : {
+            "type" : "integer",
+            "description" : "die Schulnummer der Schule",
+            "format" : "int64",
+            "example" : 123456
+          },
+          "schulform" : {
+            "type" : "string",
+            "description" : "Das Kürzel der Schulform",
+            "example" : "GY"
+          },
+          "bezeichnung" : {
+            "type" : "string",
+            "description" : "die Bezeichnung der Schule",
+            "example" : "Städt. Gymnasium"
+          },
+          "strassenname" : {
+            "type" : "string",
+            "description" : "der Straßenname der Straße in der die Schule liegt.",
+            "nullable" : true,
+            "example" : "Musterweg"
+          },
+          "hausnummer" : {
+            "type" : "string",
+            "description" : "Ggf. die Hausnummer zur Straße in der die Schule liegt.",
+            "nullable" : true,
+            "example" : "4711"
+          },
+          "hausnummerZusatz" : {
+            "type" : "string",
+            "description" : "Ggf. der Hausnummerzusatz zur Straße in der die Schule liegt.",
+            "nullable" : true,
+            "example" : "a-d"
+          },
+          "plz" : {
+            "type" : "string",
+            "description" : "die Postleitzahl der Schule",
+            "nullable" : true,
+            "example" : "42287"
+          },
+          "ort" : {
+            "type" : "string",
+            "description" : "der Ort der Schule",
+            "nullable" : true,
+            "example" : "Düsseldorf"
+          }
+        },
+        "description" : "Grundlegende Daten zu einer Schule.",
+        "nullable" : true
+      },
+      "DBMultipartBody" : {
+        "type" : "object",
+        "properties" : {
+          "database" : {
+            "type" : "string",
+            "description" : "database file",
+            "format" : "binary",
+            "nullable" : true
+          },
+          "schemaUsername" : {
+            "type" : "string",
+            "nullable" : true
+          },
+          "schemaUserPassword" : {
+            "type" : "string",
+            "nullable" : true
+          }
+        }
+      },
+      "DBMultipartBodyDataOnly" : {
+        "type" : "object",
+        "properties" : {
+          "database" : {
+            "type" : "string",
+            "description" : "database file",
+            "format" : "binary",
+            "nullable" : true
+          }
+        }
+      },
+      "SchuleAbschnitte" : {
+        "required" : [ "abschnittBez", "bezAbschnitte" ],
+        "type" : "object",
+        "properties" : {
+          "anzahlAbschnitte" : {
+            "type" : "integer",
+            "description" : "Anzahl der Abschnitte pro Jahr",
+            "format" : "int64",
+            "example" : 2
+          },
+          "abschnittBez" : {
+            "type" : "string",
+            "description" : "allgemeine Bezeichnung der Abschnitte",
+            "example" : "Halbjahr"
+          },
+          "bezAbschnitte" : {
+            "type" : "array",
+            "description" : "Bezeichnungen für die Abschnitte",
+            "example" : "1. Quartal",
+            "items" : {
+              "type" : "string",
+              "description" : "Bezeichnungen für die Abschnitte",
+              "nullable" : true,
+              "example" : "1. Quartal"
+            }
+          }
+        },
+        "description" : "Die Abschnittsinformationen der Schule."
+      },
+      "SchuleStammdaten" : {
+        "required" : [ "abschnitte", "bezeichnung1", "schuleAbschnitte", "schulform" ],
+        "type" : "object",
+        "properties" : {
+          "schulNr" : {
+            "type" : "integer",
+            "description" : "die Schulnummer der Schule",
+            "format" : "int64",
+            "example" : 123456
+          },
+          "schulform" : {
+            "type" : "string",
+            "description" : "Das Kürzel der Schulform",
+            "example" : "GY"
+          },
+          "bezeichnung1" : {
+            "type" : "string",
+            "description" : "die Bezeichnung 1 der Schule",
+            "example" : "Städt. Gymnasium"
+          },
+          "bezeichnung2" : {
+            "type" : "string",
+            "description" : "die Bezeichnung 2 der Schule",
+            "nullable" : true,
+            "example" : "der Stadt Wuppertal"
+          },
+          "bezeichnung3" : {
+            "type" : "string",
+            "description" : "die Bezeichnung 3 der Schule",
+            "nullable" : true,
+            "example" : "Albert Einstein"
+          },
+          "strassenname" : {
+            "type" : "string",
+            "description" : "der Straßenname der Straße in der die Schule liegt.",
+            "nullable" : true,
+            "example" : "Musterweg"
+          },
+          "hausnummer" : {
+            "type" : "string",
+            "description" : "Ggf. die Hausnummer zur Straße in der die Schule liegt.",
+            "nullable" : true,
+            "example" : "4711"
+          },
+          "hausnummerZusatz" : {
+            "type" : "string",
+            "description" : "Ggf. der Hausnummerzusatz zur Straße in der die Schule liegt.",
+            "nullable" : true,
+            "example" : "a-d"
+          },
+          "plz" : {
+            "type" : "string",
+            "description" : "die Postleitzahl der Schule",
+            "nullable" : true,
+            "example" : "42287"
+          },
+          "ort" : {
+            "type" : "string",
+            "description" : "der Ort der Schule",
+            "nullable" : true,
+            "example" : "Düsseldorf"
+          },
+          "telefon" : {
+            "type" : "string",
+            "description" : "die Telefonnummer der Schule",
+            "nullable" : true,
+            "example" : "0211-58670"
+          },
+          "fax" : {
+            "type" : "string",
+            "description" : "die Faxnummer der Schule",
+            "nullable" : true,
+            "example" : "0211-58671"
+          },
+          "email" : {
+            "type" : "string",
+            "description" : "die Mailadresse der Schule",
+            "nullable" : true,
+            "example" : "info@schule.de"
+          },
+          "webAdresse" : {
+            "type" : "string",
+            "description" : "die Adresse der Homepage der Schule",
+            "nullable" : true,
+            "example" : "www.schule.de"
+          },
+          "idSchuljahresabschnitt" : {
+            "type" : "integer",
+            "description" : "die ID des Schuljahresabschnittes, in welchem sich die Schule befindet",
+            "format" : "int64",
+            "example" : 14
+          },
+          "anzJGS_Jahr" : {
+            "type" : "integer",
+            "description" : "Anzahl der Abschnitte pro Jahrgangsstufe",
+            "format" : "int64",
+            "example" : 1
+          },
+          "schuleAbschnitte" : {
+            "$ref" : "#/components/schemas/SchuleAbschnitte"
+          },
+          "dauerUnterrichtseinheit" : {
+            "type" : "integer",
+            "description" : "Dauer einer Unterrichtseinheit",
+            "format" : "int64",
+            "example" : 45
+          },
+          "abschnitte" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Schuljahresabschnitt"
+            }
+          }
+        },
+        "description" : "Die Stammdaten der Schule.",
+        "nullable" : true
+      },
+      "Schuljahresabschnitt" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "description" : "Die ID des Schuljahresabschnittes",
+            "format" : "int64",
+            "example" : 4711
+          },
+          "schuljahr" : {
+            "type" : "integer",
+            "description" : "Das Schuljahr, in welchem der Abschnitt liegt",
+            "format" : "int32",
+            "example" : 2024
+          },
+          "abschnitt" : {
+            "type" : "integer",
+            "description" : "Die Nummer des Abschnitts im Schuljahr",
+            "format" : "int32",
+            "example" : 2
+          },
+          "idVorigerAbschnitt" : {
+            "type" : "integer",
+            "description" : "die ID des vorigen Schuljahresabschnittes",
+            "format" : "int64",
+            "nullable" : true,
+            "example" : 4710
+          },
+          "idFolgeAbschnitt" : {
+            "type" : "integer",
+            "description" : "die ID des folgenden Schuljahresabschnittes",
+            "format" : "int64",
+            "nullable" : true,
+            "example" : 4712
+          }
+        },
+        "description" : "Ein Abschnitt eines Schuljahres (z.B. Quartal / Halbjahr)."
+      },
+      "MigrateBody" : {
+        "type" : "object",
+        "properties" : {
+          "srcUsername" : {
+            "type" : "string",
+            "description" : "Gibt den Benutzernamen für die Quelldatenbank an.",
+            "nullable" : true,
+            "example" : "Admin"
+          },
+          "srcPassword" : {
+            "type" : "string",
+            "description" : "Gibt das Kennwort für die Quelldatenbank an.",
+            "nullable" : true,
+            "example" : "Geheim"
+          },
+          "srcLocation" : {
+            "type" : "string",
+            "description" : "Gibt den Ort der Quelldatenbank an.",
+            "nullable" : true,
+            "example" : "localhost:4711"
+          },
+          "srcSchema" : {
+            "type" : "string",
+            "description" : "Gibt den Schema-Namen der Quelldatenbank.",
+            "nullable" : true,
+            "example" : "schild_nrw"
+          },
+          "schemaUsername" : {
+            "type" : "string",
+            "description" : "Der Benutzername für den administrativen Zugang auf das neu zu erstellende Datenbank-Schema.",
+            "nullable" : true,
+            "example" : "svwsadmin"
+          },
+          "schemaUserPassword" : {
+            "type" : "string",
+            "description" : "Das Kennwort für den administrativen Zugang auf das neu zu erstellende Datenbank-Schema.",
+            "nullable" : true,
+            "example" : "StrengGeheim"
+          }
+        },
+        "description" : "Die Zugangsdaten für einen Migrationsprozess.",
+        "nullable" : true
+      },
+      "DatenbankVerbindungsdaten" : {
+        "type" : "object",
+        "properties" : {
+          "username" : {
+            "type" : "string",
+            "description" : "Gibt den Benutzernamen für die Datenbank an.",
+            "nullable" : true,
+            "example" : "Admin"
+          },
+          "password" : {
+            "type" : "string",
+            "description" : "Gibt das Kennwort für die Datenbank an.",
+            "nullable" : true,
+            "example" : "Geheim"
+          },
+          "location" : {
+            "type" : "string",
+            "description" : "Gibt den Ort der Datenbank an.",
+            "nullable" : true,
+            "example" : "localhost:4711"
+          },
+          "schema" : {
+            "type" : "string",
+            "description" : "Gibt den Schema-Namen der Datenbank an.",
+            "nullable" : true,
+            "example" : "schild_nrw"
+          }
+        },
+        "description" : "Datenbank-Verbindungsinformationen",
+        "nullable" : true
+      }
+    },
+    "securitySchemes" : {
+      "basicAuth" : {
+        "type" : "http",
+        "scheme" : "basic"
+      }
+    }
+  }
+}

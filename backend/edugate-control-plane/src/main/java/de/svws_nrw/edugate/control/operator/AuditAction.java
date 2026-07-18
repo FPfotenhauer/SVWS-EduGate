@@ -1,0 +1,16 @@
+package de.svws_nrw.edugate.control.operator;
+
+/** Fachliche Aktionen, die über {@link OperatorAccess} auditiert werden (ADR-009). */
+public enum AuditAction {
+    SCHULTRAEGER_LIST,
+    SCHULTRAEGER_CREATE,
+    SCHULTRAEGER_READ,
+    SCHULTRAEGER_UPDATE,
+    SCHULTRAEGER_DEACTIVATE,
+    SVWS_INSTANZ_LIST,
+    SVWS_INSTANZ_CREATE,
+    SVWS_INSTANZ_READ,
+    SVWS_INSTANZ_UPDATE,
+    SVWS_INSTANZ_CREDENTIALS_SET,
+    SVWS_INSTANZ_DEACTIVATE
+}

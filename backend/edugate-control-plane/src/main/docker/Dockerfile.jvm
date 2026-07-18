@@ -1,0 +1,24 @@
+# Build-Kontext ist backend/ (Maven-Multi-Module-Wurzel), damit das gemeinsame edugate-core
+# als Reactor-Abhängigkeit verfügbar ist. Siehe docker-compose.yml (context/dockerfile).
+FROM maven:3.9.9-eclipse-temurin-21 AS build
+WORKDIR /build
+
+COPY pom.xml .
+COPY edugate-core/pom.xml edugate-core/pom.xml
+COPY edugate-control-plane/pom.xml edugate-control-plane/pom.xml
+COPY edugate-gateway/pom.xml edugate-gateway/pom.xml
+COPY edugate-core/src edugate-core/src
+COPY edugate-control-plane/src edugate-control-plane/src
+
+RUN mvn -B -pl edugate-control-plane -am -DskipTests package
+
+FROM eclipse-temurin:21-jre-alpine
+RUN apk add --no-cache curl
+WORKDIR /app
+RUN addgroup -S edugate && adduser -S edugate -G edugate
+COPY --from=build /build/edugate-control-plane/target/quarkus-app/ /app/
+RUN chown -R edugate:edugate /app
+USER edugate
+
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "/app/quarkus-run.jar"]

@@ -27,3 +27,8 @@ npm-debug.log*
 
 # --- Docker-Volumes (lokale Entwicklungsdaten) ---
 docker/postgres/data/
+
+# --- Dev-Truststore für selbstsignierte Test-SVWS-Instanzen (nie committen,
+# maschinenspezifisches Zertifikat) ---
+docker/dev-truststore/*
+!docker/dev-truststore/.gitkeep

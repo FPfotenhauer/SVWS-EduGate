@@ -9,6 +9,8 @@ import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLException;
 
 /**
  * HTTP-Implementierung des {@link SvwsConnectionTester}-Ports (ADR-006, Phase 1).
@@ -17,7 +19,9 @@ import java.util.Base64;
  * definiert (Stand dieses Auftrags) noch keinen dedizierten Status-/Health-Endpunkt in
  * diesem Repository – der Aufruf der Base-URL selbst ist ein pragmatischer
  * Phase-1-Platzhalter und kann später ohne Änderung des {@link SvwsConnectionTester}-Ports
- * oder seiner Aufrufer auf einen spezifischeren Pfad umgestellt werden.
+ * oder seiner Aufrufer auf einen spezifischeren Pfad umgestellt werden (siehe
+ * `docs/entwicklung/svws-server-api.md`: `/status/alive` bzw. die Privileged-API-Endpunkte
+ * `checkrootprivs`/`checkpwd` sind voraussichtlich die fachlich passenderen Ziele).
  *
  * <p>Netzwerk- und Protokollfehler werden nie als Exception nach außen gereicht, sondern
  * immer in ein sicheres {@link SvwsConnectionTestResult#failure(String)} übersetzt – die
@@ -30,13 +34,28 @@ public final class HttpSvwsConnectionTester implements SvwsConnectionTester {
     private final Duration requestTimeout;
 
     public HttpSvwsConnectionTester() {
-        this(Duration.ofSeconds(5), Duration.ofSeconds(8));
+        this(Duration.ofSeconds(5), Duration.ofSeconds(8), null);
+    }
+
+    /**
+     * @param sslContext optional - nur für lokale Entwicklung mit einem
+     *      {@link DevTrustStoreSslContext}, um selbstsignierte Test-SVWS-Instanzen additiv zu
+     *      vertrauen. {@code null} verwendet die Standard-JVM-Vertrauenskette (Produktionsfall).
+     */
+    public HttpSvwsConnectionTester(final SSLContext sslContext) {
+        this(Duration.ofSeconds(5), Duration.ofSeconds(8), sslContext);
     }
 
     HttpSvwsConnectionTester(final Duration connectTimeout, final Duration requestTimeout) {
-        this.httpClient = HttpClient.newBuilder()
-            .connectTimeout(connectTimeout)
-            .build();
+        this(connectTimeout, requestTimeout, null);
+    }
+
+    HttpSvwsConnectionTester(final Duration connectTimeout, final Duration requestTimeout, final SSLContext sslContext) {
+        final HttpClient.Builder builder = HttpClient.newBuilder().connectTimeout(connectTimeout);
+        if (sslContext != null) {
+            builder.sslContext(sslContext);
+        }
+        this.httpClient = builder.build();
         this.requestTimeout = requestTimeout;
     }
 
@@ -62,6 +81,8 @@ public final class HttpSvwsConnectionTester implements SvwsConnectionTester {
             return SvwsConnectionTestResult.failure("SVWS-Instanz antwortete mit Status " + status + ".");
         } catch (final HttpTimeoutException e) {
             return SvwsConnectionTestResult.failure("Zeitüberschreitung beim Verbindungsaufbau.");
+        } catch (final SSLException e) {
+            return SvwsConnectionTestResult.failure("TLS-/Zertifikatsfehler bei der Verbindung.");
         } catch (final IOException e) {
             return SvwsConnectionTestResult.failure("Verbindung zur SVWS-Instanz war nicht möglich (Netzwerkfehler).");
         } catch (final InterruptedException e) {

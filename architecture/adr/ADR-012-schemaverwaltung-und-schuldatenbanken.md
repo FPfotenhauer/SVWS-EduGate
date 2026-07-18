@@ -107,8 +107,10 @@ Mindestens abzubilden sind:
 
 EduGate muss sinnvolle, betreiberfreundliche Namenskonventionen für SVWS-Schemata anbieten. Die
 Privileged API arbeitet mit technischen Schemanamen; diese Namen werden später in Massenverwaltung,
-Import/Export, Migration, Support und Fehleranalyse häufig verwendet. Sie dürfen daher nicht rein
-zufällig oder nur UI-intern entstehen.
+Import/Export, Migration, Support und Fehleranalyse häufig verwendet. Gleichzeitig ist der
+Schemaname im heutigen SVWS-Server auch in der Login-Auswahl für Schulen sichtbar. Er ist also
+nicht nur ein internes technisches Detail. Die Standardkonvention muss deshalb für Schulen knapp
+und verständlich bleiben.
 
 Grundlage der Standardkonvention ist die **Schulnummer**:
 
@@ -120,15 +122,16 @@ Grundlage der Standardkonvention ist die **Schulnummer**:
 EduGate soll eine Standard-Namenskonvention vorschlagen, z. B.:
 
 ```text
-svws_<schulnummer>_<umgebung>
+<schulnummer>              für Produktiv
+<schulnummer>_<umgebung>   für weitere Umgebungen
 ```
 
 Beispiele:
 
 ```text
-svws_123456_prod
-svws_123456_test
-svws_123456_schulung
+123456
+123456_test
+123456_schulung
 ```
 
 Die konkrete Konvention ist Betreiberkonfiguration, aber sie muss folgende Eigenschaften haben:
@@ -139,6 +142,7 @@ Die konkrete Konvention ist Betreiberkonfiguration, aber sie muss folgende Eigen
 - kompatibel mit MariaDB-Schemanamen
 - ohne personenbezogene Daten
 - ohne interne Betreibergeheimnisse
+- in der aktuellen SVWS-Login-Auswahl für Schulen zumutbar lesbar
 - erklärbar in Exporten und Betriebsdokumentation
 
 Für Schulen ohne belastbare Schulnummer braucht es einen Sonderpfad:
@@ -150,6 +154,11 @@ Für Schulen ohne belastbare Schulnummer braucht es einen Sonderpfad:
 
 Die Implementierung darf mit einer einfachen Standardkonvention starten, muss aber so geschnitten
 sein, dass Betreiber die Konvention später konfigurieren oder durch Regeln erweitern können.
+
+Langfristig wäre im SVWS-Server eine Trennung zwischen technischem Schemanamen und angezeigtem
+Login-Auswahlnamen wünschenswert. Solange diese Trennung nicht existiert, behandelt EduGate den
+Schemanamen als technisch **und** sichtbar und vermeidet unnötige technische Präfixe wie `svws_`
+in der Standardkonvention.
 
 ### Umgebung und Status
 

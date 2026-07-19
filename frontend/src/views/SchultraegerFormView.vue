@@ -8,7 +8,6 @@ import { useSchuleStore } from '@/stores/schuleStore'
 import { useSchultraegerStore } from '@/stores/schultraegerStore'
 import { ApiError } from '@/types/problem'
 import type { Ansprechpartner } from '@/types/ansprechpartner'
-import type { Schule } from '@/types/schule'
 import type { Schultraeger } from '@/types/schultraeger'
 
 const props = defineProps<{ id?: string }>()
@@ -188,75 +187,35 @@ async function bestaetigenAnsprechpartnerLoeschen(): Promise<void> {
   zuLoeschenderAnsprechpartner.value = null
 }
 
-// --- Schulen: ein Formular für Anlegen und Bearbeiten, in einem Modal (analog Ansprechpartner).
-// Die Verwaltung der Schuldatenbanken/Schemata einer Schule (ADR-012) erfolgt auf einer eigenen
-// Detailseite, da eine Schule - anders als ein Ansprechpartner - selbst wieder Kind-Entitäten hat.
-const schulnummer = ref('')
-const schulname = ref('')
-const schuleBearbeiteId = ref<string | null>(null)
-const schuleSpeichern = ref(false)
-const schuleFehler = ref<string | null>(null)
-const schuleModalOffen = ref(false)
-
-function schuleFormularZuruecksetzen(): void {
-  schuleBearbeiteId.value = null
-  schulnummer.value = ''
-  schulname.value = ''
-  schuleFehler.value = null
-}
-
-function schuleHinzufuegenOeffnen(): void {
-  schuleFormularZuruecksetzen()
-  schuleModalOffen.value = true
-}
-
-function schuleBearbeiten(schule: Schule): void {
-  schuleBearbeiteId.value = schule.id
-  schulnummer.value = schule.schulnummer
-  schulname.value = schule.name
-  schuleFehler.value = null
-  schuleModalOffen.value = true
-}
-
-function schuleModalSchliessen(): void {
-  schuleModalOffen.value = false
-}
-
-async function schuleAbsenden(): Promise<void> {
-  if (!props.id) return
-  schuleFehler.value = null
-  schuleSpeichern.value = true
-  try {
-    const daten = { schulnummer: schulnummer.value, name: schulname.value }
-    if (schuleBearbeiteId.value) {
-      await schuleStore.update(props.id, schuleBearbeiteId.value, daten)
-    } else {
-      await schuleStore.create(props.id, daten)
-    }
-    schuleModalOffen.value = false
-  } catch (error) {
-    schuleFehler.value = error instanceof ApiError ? error.message : 'Speichern fehlgeschlagen.'
-  } finally {
-    schuleSpeichern.value = false
-  }
-}
+// Schulen sind seit ADR-013 kein primär hier verstecktes CRUD mehr: Diese Ansicht zeigt nur noch
+// eine kompakte, lesende Liste mit Querverweisen in die Schuldatenbank-Übersicht bzw. die
+// Schule-Detailseite (dort auch Anlegen/Bearbeiten). Betreiber-Hauptsicht ist "Schuldatenbanken".
 </script>
 
 <template>
   <main>
-    <h1>{{ bearbeitenModus ? 'Schulträger bearbeiten' : 'Neuen Schulträger anlegen' }}</h1>
+    <h1 v-if="!bearbeitenModus">Neuen Schulträger anlegen</h1>
 
     <template v-if="bearbeitenModus">
       <p v-if="fehler && !bearbeitenModalOffen" role="alert" class="fehler">{{ fehler }}</p>
 
+      <header class="toolbar">
+        <h1>{{ geladenerSchultraeger?.name ?? 'Schulträger' }}</h1>
+        <button type="button" class="button-secondary btn-klein" @click="bearbeitenOeffnen">Bearbeiten</button>
+      </header>
+
       <dl v-if="geladenerSchultraeger" class="detail-grid">
-        <div class="detail-eintrag">
-          <dt>Name</dt>
-          <dd>{{ geladenerSchultraeger.name }}</dd>
-        </div>
         <div class="detail-eintrag">
           <dt>Trägernummer</dt>
           <dd>{{ geladenerSchultraeger.traegernummer }}</dd>
+        </div>
+        <div class="detail-eintrag">
+          <dt>Status</dt>
+          <dd>
+            <span :class="['status', geladenerSchultraeger.aktiv ? 'status-aktiv' : 'status-inaktiv']">
+              {{ geladenerSchultraeger.aktiv ? 'Aktiv' : 'Deaktiviert' }}
+            </span>
+          </dd>
         </div>
         <div class="detail-eintrag">
           <dt>Straße</dt>
@@ -276,9 +235,19 @@ async function schuleAbsenden(): Promise<void> {
         </div>
       </dl>
 
-      <div class="aktionen">
-        <button type="button" class="button-primary" @click="bearbeitenOeffnen">Bearbeiten</button>
-      </div>
+      <section v-if="geladenerSchultraeger?.aktiv" class="operationen">
+        <h2>Operationen</h2>
+        <div class="operationen-grid">
+          <article class="operation-karte gefahr">
+            <h3>Schulträger deaktivieren</h3>
+            <p>
+              Ein deaktivierter Schulträger bleibt erhalten, ist aber nicht mehr aktiv nutzbar. Diese Aktion kann über
+              die Oberfläche aktuell nicht rückgängig gemacht werden.
+            </p>
+            <button type="button" class="danger" @click="zuDeaktivierenBestaetigen = true">Deaktivieren</button>
+          </article>
+        </div>
+      </section>
     </template>
 
     <form v-else @submit.prevent="absenden">
@@ -401,6 +370,7 @@ async function schuleAbsenden(): Promise<void> {
             <tr>
               <th scope="col">Schulnummer</th>
               <th scope="col">Name</th>
+              <th scope="col">Status</th>
               <th scope="col">Aktionen</th>
             </tr>
           </thead>
@@ -408,37 +378,26 @@ async function schuleAbsenden(): Promise<void> {
             <tr v-for="schule in schuleStore.items" :key="schule.id">
               <td>{{ schule.schulnummer }}</td>
               <td>{{ schule.name }}</td>
+              <td>
+                <span :class="['status', schule.aktiv ? 'status-aktiv' : 'status-inaktiv']">
+                  {{ schule.aktiv ? 'Aktiv' : 'Deaktiviert' }}
+                </span>
+              </td>
               <td class="aktionen-zelle">
-                <button type="button" class="button-secondary btn-klein" @click="schuleBearbeiten(schule)">
-                  Bearbeiten
-                </button>
                 <RouterLink
                   :to="{ name: 'schule-detail', params: { schultraegerId: props.id, schuleId: schule.id } }"
                   class="button-secondary btn-klein"
                 >
-                  Schuldatenbanken verwalten
+                  Zur Schule
                 </RouterLink>
               </td>
             </tr>
             <tr v-if="schuleStore.items.length === 0">
-              <td colspan="3">Keine Schulen erfasst.</td>
+              <td colspan="4">Keine Schulen erfasst.</td>
             </tr>
           </tbody>
         </table>
       </div>
-
-      <div class="aktionen">
-        <button type="button" class="button-primary" @click="schuleHinzufuegenOeffnen">Hinzufügen</button>
-      </div>
-    </section>
-
-    <section v-if="bearbeitenModus && geladenerSchultraeger?.aktiv" class="gefahrenzone">
-      <h2>Schulträger deaktivieren</h2>
-      <p class="hinweis">
-        Ein deaktivierter Schulträger bleibt erhalten, ist aber nicht mehr aktiv nutzbar. Diese Aktion kann über die
-        Oberfläche aktuell nicht rückgängig gemacht werden.
-      </p>
-      <button type="button" class="danger" @click="zuDeaktivierenBestaetigen = true">Deaktivieren</button>
     </section>
 
     <Modal :open="bearbeitenModalOffen" titel="Schulträger bearbeiten" @close="bearbeitenSchliessen">
@@ -539,33 +498,6 @@ async function schuleAbsenden(): Promise<void> {
       </form>
     </Modal>
 
-    <Modal
-      :open="schuleModalOffen"
-      :titel="schuleBearbeiteId ? 'Schule bearbeiten' : 'Neue Schule anlegen'"
-      @close="schuleModalSchliessen"
-    >
-      <form @submit.prevent="schuleAbsenden">
-        <p v-if="schuleFehler" role="alert" class="fehler">{{ schuleFehler }}</p>
-
-        <div class="feld">
-          <label for="schule-schulnummer">Schulnummer</label>
-          <input id="schule-schulnummer" v-model="schulnummer" type="text" required />
-        </div>
-
-        <div class="feld">
-          <label for="schule-name">Name</label>
-          <input id="schule-name" v-model="schulname" type="text" required />
-        </div>
-
-        <div class="aktionen">
-          <button type="submit" class="button-primary" :disabled="schuleSpeichern">
-            {{ schuleBearbeiteId ? 'Aktualisieren' : 'Hinzufügen' }}
-          </button>
-          <button type="button" class="button-secondary" @click="schuleModalSchliessen">Abbrechen</button>
-        </div>
-      </form>
-    </Modal>
-
     <ConfirmDialog
       :open="zuDeaktivierenBestaetigen"
       titel="Schulträger deaktivieren"
@@ -653,11 +585,55 @@ main {
   margin: 0;
 }
 
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.operationen,
 .ansprechpartner,
 .schulen {
   margin-top: 2.5rem;
   padding-top: 1.5rem;
   border-top: 1px solid var(--line);
+}
+
+.operationen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.operation-karte {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.operation-karte h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.operation-karte p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  flex-grow: 1;
+}
+
+.operation-karte.gefahr {
+  border-color: var(--error);
 }
 
 .ansprechpartner .aktionen,
@@ -749,15 +725,26 @@ tbody tr:hover {
   font-size: 0.85em;
 }
 
-.gefahrenzone {
-  margin-top: 2.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--line);
+.status {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-aktiv {
+  color: var(--accent);
+}
+
+.status-inaktiv {
+  color: var(--ink-soft);
 }
 
 .hinweis {
   color: var(--ink-soft);
   max-width: 36rem;
+}
+
+.hinweis a {
+  color: var(--accent);
 }
 
 .fehler {

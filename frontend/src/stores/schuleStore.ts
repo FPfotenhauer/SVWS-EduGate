@@ -42,7 +42,13 @@ export const useSchuleStore = defineStore('schule', () => {
     return schuleApi.getSchule(schultraegerId, id, accessToken)
   }
 
-  return { items, loading, errorMessage, fetchList, create, update, get }
+  async function deactivate(schultraegerId: string, id: string): Promise<Schule> {
+    const deactivated = await schuleApi.deactivateSchule(schultraegerId, id, accessToken)
+    await fetchList(schultraegerId)
+    return deactivated
+  }
+
+  return { items, loading, errorMessage, fetchList, create, update, get, deactivate }
 })
 
 function toErrorMessage(error: unknown): string {

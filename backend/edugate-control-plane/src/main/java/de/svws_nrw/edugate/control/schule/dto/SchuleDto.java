@@ -9,6 +9,7 @@ public record SchuleDto(
     UUID schultraegerId,
     String schulnummer,
     String name,
+    boolean aktiv,
     Instant createdAt,
     Instant updatedAt
 ) {

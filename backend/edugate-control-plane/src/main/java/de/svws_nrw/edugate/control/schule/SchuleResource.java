@@ -3,10 +3,12 @@ package de.svws_nrw.edugate.control.schule;
 import de.svws_nrw.edugate.control.schule.dto.SchuleCreateRequest;
 import de.svws_nrw.edugate.control.schule.dto.SchuleDto;
 import de.svws_nrw.edugate.control.schule.dto.SchuleUpdateRequest;
+import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
@@ -33,6 +35,9 @@ public class SchuleResource {
     @Inject
     SchuleService service;
 
+    @Inject
+    SecurityIdentity securityIdentity;
+
     @GET
     public List<SchuleDto> list(@PathParam("schultraegerId") final UUID schultraegerId) {
         return service.list(schultraegerId);
@@ -56,5 +61,15 @@ public class SchuleResource {
     public SchuleDto update(@PathParam("schultraegerId") final UUID schultraegerId, @PathParam("id") final UUID id,
             @Valid final SchuleUpdateRequest request) {
         return service.update(schultraegerId, id, request);
+    }
+
+    @DELETE
+    @Path("/{id}")
+    public SchuleDto deactivate(@PathParam("schultraegerId") final UUID schultraegerId, @PathParam("id") final UUID id) {
+        return service.deactivate(adminSubject(), schultraegerId, id);
+    }
+
+    private String adminSubject() {
+        return securityIdentity.getPrincipal().getName();
     }
 }

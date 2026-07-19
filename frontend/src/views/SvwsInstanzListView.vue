@@ -280,9 +280,26 @@ main {
   margin: 1rem 0;
 }
 
-.search input {
+.search input,
+.search select {
   flex: 1 1 12rem;
   min-width: 0;
+}
+
+.search select {
+  font: inherit;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.search select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-color: var(--accent);
 }
 
 .table-wrap {

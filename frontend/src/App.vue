@@ -18,10 +18,22 @@ function cycleTheme(): void {
 <template>
   <div class="app">
     <header class="app-header">
-      <span class="app-title">SVWS-EduGate</span>
+      <div class="app-title-zeile">
+        <span class="app-title">SVWS-EduGate</span>
+        <RouterLink
+          v-if="authStore.isAuthenticated && authStore.roles.includes('dienstleister-admin')"
+          :to="{ name: 'einstellungen' }"
+          class="settings-link"
+          title="Einstellungen"
+          aria-label="Einstellungen"
+        >
+          ⚙
+        </RouterLink>
+      </div>
       <nav v-if="authStore.isAuthenticated" class="app-nav" aria-label="Hauptnavigation">
         <RouterLink :to="{ name: 'schultraeger-liste' }">Schulträger</RouterLink>
         <RouterLink :to="{ name: 'svws-instanz-liste' }">SVWS-Instanzen</RouterLink>
+        <RouterLink :to="{ name: 'schuldatenbank-uebersicht' }">Schuldatenbanken</RouterLink>
       </nav>
       <div class="app-header-actions">
         <button
@@ -55,9 +67,33 @@ function cycleTheme(): void {
   border-bottom: 1px solid var(--line);
 }
 
+.app-title-zeile {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .app-title {
   font-weight: 700;
   color: var(--accent);
+}
+
+.settings-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 6px;
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-size: 1.5rem;
+}
+
+.settings-link:hover,
+.settings-link.router-link-active {
+  color: var(--accent);
+  background: var(--surface-strong);
 }
 
 .app-nav {

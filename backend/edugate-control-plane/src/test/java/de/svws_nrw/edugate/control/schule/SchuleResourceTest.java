@@ -1,6 +1,7 @@
 package de.svws_nrw.edugate.control.schule;
 
 import static io.restassured.RestAssured.given;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 
 import de.svws_nrw.edugate.control.support.PostgresTestResource;
@@ -8,6 +9,11 @@ import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -59,6 +65,7 @@ class SchuleResourceTest {
             .statusCode(201)
             .body("schulnummer", equalTo("123456"))
             .body("name", equalTo("Musterschule"))
+            .body("aktiv", equalTo(true))
             .extract().path("id");
 
         given().when().get(path + "/" + id).then().statusCode(200).body("id", equalTo(id));
@@ -140,6 +147,76 @@ class SchuleResourceTest {
             .then()
             .statusCode(404)
             .contentType("application/problem+json");
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void deaktivierenSetztAktivAufFalseUndErzeugtAuditEintrag() {
+        final String schultraegerId = neuenSchultraegerAnlegen();
+        final String path = schulenPath(schultraegerId);
+
+        final String createBody = "{\"schulnummer\": \"111222\", \"name\": \"Zu deaktivierende Schule\"}";
+        final String id = given().contentType(ContentType.JSON).body(createBody).when().post(path)
+            .then().statusCode(201).extract().path("id");
+
+        given()
+            .when().delete(path + "/" + id)
+            .then()
+            .statusCode(200)
+            .body("aktiv", equalTo(false));
+
+        given().when().get(path + "/" + id).then().statusCode(200).body("aktiv", equalTo(false));
+
+        assertThat(auditOutcomesFor(UUID.fromString(id), "SCHULE_DEACTIVATE")).containsExactly("SUCCESS");
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void deaktivierenUnbekannterSchuleErgibt404() {
+        final String path = schulenPath(neuenSchultraegerAnlegen());
+
+        given()
+            .when().delete(path + "/" + UUID.randomUUID())
+            .then()
+            .statusCode(404)
+            .contentType("application/problem+json");
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void deaktivierenUeberFremdenSchultraegerPfadWirdVerweigert() {
+        final String schultraegerA = neuenSchultraegerAnlegen();
+        final String schultraegerB = neuenSchultraegerAnlegen();
+
+        final String createBody = "{\"schulnummer\": \"333444\", \"name\": \"Schule von A\"}";
+        final String schuleId = given().contentType(ContentType.JSON).body(createBody)
+            .when().post(schulenPath(schultraegerA)).then().statusCode(201).extract().path("id");
+
+        given()
+            .when().delete(schulenPath(schultraegerB) + "/" + schuleId)
+            .then()
+            .statusCode(404)
+            .contentType("application/problem+json");
+
+        given().when().get(schulenPath(schultraegerA) + "/" + schuleId).then().statusCode(200).body("aktiv", equalTo(true));
+    }
+
+    private List<String> auditOutcomesFor(final UUID entityId, final String action) {
+        try (Connection connection = PostgresTestResource.openAdminConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                 "SELECT outcome FROM audit_admin WHERE entity_id = ? AND action = ?")) {
+            statement.setObject(1, entityId);
+            statement.setString(2, action);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                final List<String> outcomes = new ArrayList<>();
+                while (resultSet.next()) {
+                    outcomes.add(resultSet.getString("outcome"));
+                }
+                return outcomes;
+            }
+        } catch (final Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     static String schulenPath(final String schultraegerId) {

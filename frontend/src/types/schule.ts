@@ -3,6 +3,7 @@ export interface Schule {
   schultraegerId: string
   schulnummer: string
   name: string
+  aktiv: boolean
   createdAt: string
   updatedAt: string
 }

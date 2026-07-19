@@ -16,6 +16,7 @@ const beispielSchule: Schule = {
   schultraegerId: SCHULTRAEGER_ID,
   schulnummer: '123456',
   name: 'Musterschule',
+  aktiv: true,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
 }
@@ -94,5 +95,18 @@ describe('schuleStore', () => {
 
     expect(getSpy).toHaveBeenCalledWith(SCHULTRAEGER_ID, beispielSchule.id, expect.any(Function))
     expect(result).toEqual(beispielSchule)
+  })
+
+  it('deactivate ruft die API mit Schulträger-ID und Schul-ID auf und lädt die Liste danach neu', async () => {
+    const deaktivierteSchule = { ...beispielSchule, aktiv: false }
+    const deactivateSpy = vi.spyOn(schuleApi, 'deactivateSchule').mockResolvedValue(deaktivierteSchule)
+    const listSpy = vi.spyOn(schuleApi, 'listSchulen').mockResolvedValue([deaktivierteSchule])
+
+    const store = useSchuleStore()
+    const result = await store.deactivate(SCHULTRAEGER_ID, beispielSchule.id)
+
+    expect(deactivateSpy).toHaveBeenCalledWith(SCHULTRAEGER_ID, beispielSchule.id, expect.any(Function))
+    expect(listSpy).toHaveBeenCalledWith(SCHULTRAEGER_ID, expect.any(Function))
+    expect(result).toEqual(deaktivierteSchule)
   })
 })

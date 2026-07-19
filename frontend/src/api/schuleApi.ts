@@ -29,3 +29,11 @@ export function updateSchule(
 ): Promise<Schule> {
   return apiRequest<Schule>(`${basePath(schultraegerId)}/${id}`, { method: 'PUT', body: data, getAccessToken })
 }
+
+export function deactivateSchule(
+  schultraegerId: string,
+  id: string,
+  getAccessToken: AccessTokenProvider,
+): Promise<Schule> {
+  return apiRequest<Schule>(`${basePath(schultraegerId)}/${id}`, { method: 'DELETE', getAccessToken })
+}

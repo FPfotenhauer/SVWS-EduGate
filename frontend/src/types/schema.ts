@@ -3,14 +3,11 @@ export type SchemaStatus =
 
 export type SchemaSource = 'MANUELL' | 'SYNCHRONISIERT'
 
-/**
- * Startvorschläge für die Umgebungsauswahl (ADR-012). `umgebung` ist bewusst freier Text statt
- * eines geschlossenen Enums - Betreiber können weitere Werte eingeben (z. B. Abnahme, Migration,
- * Archiv, Demo). "PRODUKTIV" bleibt der einzige fachlich ausgezeichnete Wert (kein Namenssuffix,
- * höchstens ein aktives Schema je Schule).
- */
-export const PRODUKTIV_UMGEBUNG = 'PRODUKTIV'
-export const STANDARD_UMGEBUNGEN = ['PRODUKTIV', 'TEST', 'SCHULUNG']
+// `umgebung` ist bewusst freier Text statt eines geschlossenen Enums (ADR-012). Die zulässigen
+// Werte werden nicht mehr als Frontend-Konstante gepflegt, sondern über die Betreiber-Einstellung
+// "Umgebungen verwalten" (schemaUmgebungStore, Tabelle schema_umgebung). "PRODUKTIV" bleibt dort
+// als Systemeintrag der einzige fachlich ausgezeichnete Wert (kein Namenssuffix, höchstens ein
+// aktives Schema je Schule).
 
 export interface Schema {
   id: string

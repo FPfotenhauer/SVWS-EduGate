@@ -55,7 +55,7 @@ public class SchemaService {
 
     private static final String INSERT_AUDIT = """
         INSERT INTO audit_admin (admin_subject, action, entity_type, entity_id, tenant_id, outcome, details)
-        VALUES (?, ?, 'schema', ?, ?, 'SUCCESS', ?::jsonb)
+        VALUES (?, ?, 'schema', ?, ?, ?, ?::jsonb)
         """;
 
     @Inject
@@ -196,7 +196,8 @@ public class SchemaService {
             statement.setString(2, action.name());
             statement.setObject(3, entityId);
             statement.setObject(4, tenantId);
-            statement.setString(5, detailsJson);
+            statement.setString(5, AuditOutcome.SUCCESS.name());
+            statement.setString(6, detailsJson);
             statement.executeUpdate();
         }
     }

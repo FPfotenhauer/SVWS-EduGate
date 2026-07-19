@@ -1,5 +1,7 @@
 package de.svws_nrw.edugate.control.schule;
 
+import de.svws_nrw.edugate.control.operator.AuditAction;
+import de.svws_nrw.edugate.control.operator.AuditOutcome;
 import de.svws_nrw.edugate.control.operator.OperatorNotFoundException;
 import de.svws_nrw.edugate.control.schule.dto.SchuleCreateRequest;
 import de.svws_nrw.edugate.control.schule.dto.SchuleDto;
@@ -7,6 +9,7 @@ import de.svws_nrw.edugate.control.schule.dto.SchuleUpdateRequest;
 import de.svws_nrw.edugate.control.tenant.TenantAccess;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -20,11 +23,23 @@ import java.util.UUID;
  * daher laufen alle Operationen über {@link TenantAccess} statt {@code OperatorAccess} - analog
  * zu Ansprechpartner. Schule ist die notwendige Zuordnungsstufe für Schuldatenbanken/Schemata
  * (ADR-012: Schulträger -&gt; Schule -&gt; Schema -&gt; Instanz).
+ *
+ * <p>Deaktivieren ist wie bei {@code SchemaService} eine bewusste Ausnahme vom sonst
+ * unauditierten {@code TenantAccess}-Muster: Eine ganze Schule stillzulegen ist eine
+ * "gefährliche Operation" (ADR-013) und wird deshalb selbst auditiert, atomar in derselben
+ * Tenant-Transaktion. Siehe {@code SchemaService} für die ausführliche Begründung und die
+ * bekannte Einschränkung (kein unabhängiger ERROR/DENIED-Audit-Pfad wie bei
+ * {@code OperatorAccess}).
  */
 @ApplicationScoped
 public class SchuleService {
 
-    private static final String SELECT_COLUMNS = "id, tenant_id, schulnummer, name, created_at, updated_at";
+    private static final String SELECT_COLUMNS = "id, tenant_id, schulnummer, name, aktiv, created_at, updated_at";
+
+    private static final String INSERT_AUDIT = """
+        INSERT INTO audit_admin (admin_subject, action, entity_type, entity_id, tenant_id, outcome, details)
+        VALUES (?, ?, 'schule', ?, ?, ?, null)
+        """;
 
     @Inject
     TenantAccess tenantAccess;
@@ -84,8 +99,45 @@ public class SchuleService {
         });
     }
 
-    private SchuleDto selectById(final java.sql.Connection connection, final UUID id) throws SQLException {
-        final String sql = "SELECT " + SELECT_COLUMNS + " FROM schule WHERE id = ? AND tenant_id = current_setting('edugate.tenant_id', true)::uuid";
+    /**
+     * Deaktiviert eine Schule (ADR-013: "gefährliche Operation" auf der Schulseite). Physisches
+     * Löschen ist bewusst nicht Teil dieses Auftrags; vorhandene Schuldatenbanken bleiben
+     * unverändert bestehen.
+     */
+    public SchuleDto deactivate(final String adminSubject, final UUID schultraegerId, final UUID id) {
+        return tenantAccess.execute(schultraegerId, connection -> {
+            final String sql = "UPDATE schule SET aktiv = false, updated_at = now() "
+                + "WHERE id = ? AND tenant_id = ? RETURNING " + SELECT_COLUMNS;
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setObject(1, id);
+                statement.setObject(2, schultraegerId);
+                try (ResultSet resultSet = statement.executeQuery()) {
+                    if (!resultSet.next()) {
+                        throw new OperatorNotFoundException("Schule '" + id + "' wurde nicht gefunden.");
+                    }
+                    final SchuleDto dto = toDto(resultSet);
+                    writeAudit(connection, adminSubject, AuditAction.SCHULE_DEACTIVATE, id, schultraegerId);
+                    return dto;
+                }
+            }
+        });
+    }
+
+    private void writeAudit(final Connection connection, final String adminSubject, final AuditAction action,
+            final UUID entityId, final UUID tenantId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(INSERT_AUDIT)) {
+            statement.setString(1, adminSubject);
+            statement.setString(2, action.name());
+            statement.setObject(3, entityId);
+            statement.setObject(4, tenantId);
+            statement.setString(5, AuditOutcome.SUCCESS.name());
+            statement.executeUpdate();
+        }
+    }
+
+    private SchuleDto selectById(final Connection connection, final UUID id) throws SQLException {
+        final String sql = "SELECT " + SELECT_COLUMNS
+            + " FROM schule WHERE id = ? AND tenant_id = current_setting('edugate.tenant_id', true)::uuid";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setObject(1, id);
             try (ResultSet resultSet = statement.executeQuery()) {
@@ -103,6 +155,7 @@ public class SchuleService {
             (UUID) resultSet.getObject("tenant_id"),
             resultSet.getString("schulnummer"),
             resultSet.getString("name"),
+            resultSet.getBoolean("aktiv"),
             resultSet.getTimestamp("created_at").toInstant(),
             resultSet.getTimestamp("updated_at").toInstant());
     }

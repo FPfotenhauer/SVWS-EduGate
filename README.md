@@ -4,10 +4,17 @@ Werkzeug für Dienstleister, die SVWS-Server für mehrere Schulträger in einem 
 Rechenzentrum betreiben. SVWS-EduGate besteht aus einer **Control Plane** (Serververwaltung) und
 einem **Gateway** (mandantengetrennter API-Zugriff auf Schuldaten).
 
-Dieser Stand implementiert den ersten vertikalen Durchstich: Ein Dienstleister-Admin meldet sich
-über Keycloak an und kann Schulträger anlegen, auflisten, anzeigen, bearbeiten und deaktivieren –
-von der Vue-Oberfläche über die Control-Plane-API bis PostgreSQL, mit aktiver Row-Level Security
-und auditiertem Admin-Zugriff.
+Der aktuelle Stand implementiert eine nutzbare Control-Plane-Verwaltung für Schulträger, Schulen,
+SVWS-Instanzen, Schuldatenbanken/Schemata und Schema-Umgebungen. Dienstleister-Admins melden sich
+über Keycloak an und verwalten diese Daten von der Vue-Oberfläche über die Control-Plane-API bis
+PostgreSQL, mit aktiver Row-Level Security und auditiertem Admin-Zugriff.
+
+Wichtig: Schuldatenbanken/Schemata werden aktuell als EduGate-Verwaltungsdaten geführt. Das Anlegen
+einer Schuldatenbank erzeugt noch kein echtes MariaDB-Schema auf dem SVWS-Server. Die Control Plane
+spricht den SVWS-Server derzeit nur für Verbindungstests an (`GET /status/alive` ohne Zugangsdaten
+oder `POST /api/schema/root/user/checkrootprivs` mit hinterlegten Zugangsdaten). Echte
+SVWS-Privileged-API-Operationen wie Anlegen, Löschen, Migration, Import oder Export sind als
+geschützte Ausbaustufe nach ADR-014 vorbereitet.
 
 Verbindliche Architekturdokumentation: [`architecture/ARCHITECTURE.md`](architecture/ARCHITECTURE.md)
 und die [ADRs](architecture/adr/README.md). Nutzerorientierte Dokumentation (Betreiber,
@@ -92,7 +99,8 @@ Module:
 
 - `edugate-core` – Domänenmodell, `SecretStore`-Port (AES-256-GCM, ADR-006), keine
   Quarkus-Laufzeitabhängigkeiten.
-- `edugate-control-plane` – REST-API `/admin/api/v1`, Mandantenmodell mit PostgreSQL-RLS
+- `edugate-control-plane` – REST-API `/admin/api/v1`, Verwaltung von Schulträgern, Schulen,
+  SVWS-Instanzen, Schuldatenbanken und Schema-Umgebungen; Mandantenmodell mit PostgreSQL-RLS
   (ADR-002/ADR-008), auditierter Operator-Zugriffspfad (ADR-009).
 - `edugate-gateway` – Data-Plane-Service (in diesem Stand nur Skeleton: OIDC, Health, `/ping`;
   Proxy-/Mandanten-Auflösungslogik folgt gemäß ADR-004 in einem späteren Auftrag).
@@ -121,6 +129,9 @@ cd frontend && npm run lint   # ESLint + Prettier
   Wurzeltabelle `schultraeger`)
 - Cross-Tenant-Negativtest (`schule` und `schultraeger`)
 - Schulträger-CRUD-Happy-Path, Validierungsfehler (400), 401/403-Fälle
+- Schulen-, SVWS-Instanzen-, Schema- und Schema-Umgebungsverwaltung inklusive RLS- und
+  Validierungsfällen
+- SVWS-Verbindungstest ohne Secret-Leakage in Antworten
 - Audit-Invarianten (genau ein `audit_admin`-Eintrag je Operation, ERROR-Audit übersteht
   Rollback, kein `UPDATE`/`DELETE` auf `audit_admin` für Anwendungsrollen)
 - ArchUnit-Test: die `operator`-Datasource wird außerhalb von
@@ -137,6 +148,14 @@ Architekturentscheidungen unter [`architecture/adr/`](architecture/adr/README.md
   Wurzeltabelle `schultraeger`
 - [ADR-009](architecture/adr/ADR-009-operator-zugriff-und-audit.md) – Operator-Zugriff und
   Admin-Audit
+- [ADR-012](architecture/adr/ADR-012-schemaverwaltung-und-schuldatenbanken.md) – Schemaverwaltung
+  und Schuldatenbanken
+- [ADR-013](architecture/adr/ADR-013-betreiber-ui-schemaverwaltung.md) – Betreiber-UI für
+  Schemaverwaltung
+- [ADR-014](architecture/adr/ADR-014-verwendung-echter-privileged-api-aufrufe.md) – geschützte
+  echte SVWS-Privileged-API-Aufrufe
+- [ADR-016](architecture/adr/ADR-016-deployment-und-auslieferungsmodell.md) – Deployment und
+  Auslieferung
 
 ## Lizenz
 

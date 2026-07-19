@@ -64,9 +64,19 @@ Oberfläche ist der primäre Einstieg für alle schema- und instanzbezogenen Bet
 
 ### Navigations- und Informationsarchitektur
 
-Die Schemaverwaltung wird als eigener Hauptbereich der Administration geführt, z. B.
-"Schuldatenbanken", "SVWS-Instanzen" oder ein zusammengefasster Bereich "SVWS-Betrieb". Der genaue
-Menüpunkt ist eine UI-Detailentscheidung; verbindlich ist:
+Die Schemaverwaltung wird als eigener Hauptbereich der Administration geführt. Dieser Bereich hat
+zwei gleichwertige Hauptsichten:
+
+1. **SVWS-Instanzen:** Serverperspektive. Betreiber sehen pro Instanz, welche Schuldatenbanken auf
+   diesem Server liegen, welche Status-/Zertifikats-/Credential-Auffälligkeiten es gibt und welche
+   Betriebsaktionen für diese Instanz anstehen.
+2. **Schuldatenbanken:** fachliche Schul-/Schema-Perspektive. Betreiber sehen, welche Schulen mit
+   welchen Datenbanken existieren, gruppierbar nach Schulträger und filter-/gruppierbar nach
+   Umgebungsvariante wie Produktiv, Test, Schulung, Migration oder Archiv.
+
+Der genaue Menüzuschnitt ist eine UI-Detailentscheidung; möglich sind z. B. zwei Menüpunkte
+"SVWS-Instanzen" und "Schuldatenbanken" oder ein gemeinsamer Bereich "SVWS-Betrieb" mit zwei Tabs.
+Verbindlich ist:
 
 - Schulen und Schemata dürfen nicht primär unter "Schulträger bearbeiten" versteckt werden.
 - Die UI muss eine Instanzsicht anbieten: SVWS-Instanz -> gehostete Schuldatenbanken -> Schule ->
@@ -74,6 +84,10 @@ Menüpunkt ist eine UI-Detailentscheidung; verbindlich ist:
 - Die UI muss eine fachliche Sicht anbieten: Schulträger/Schule -> Schuldatenbanken ->
   SVWS-Instanz.
 - Beide Sichten müssen dieselben Daten zeigen und per Querverweis ineinander navigierbar sein.
+- Navigation zwischen den Sichten muss den Kontext erhalten: Wer aus einer Schuldatenbank zur
+  hostenden SVWS-Instanz springt, soll dort genau diese Schuldatenbank wiederfinden; wer aus einer
+  Instanz zu einer Schule oder Schuldatenbank springt, soll nicht in einem allgemeinen
+  Schulträger-Bearbeitungsformular landen.
 - Listen müssen für große Betreiberumgebungen filter-, such- und sortierbar sein.
 
 Der Betreiber muss auf einen Blick erkennen können:
@@ -99,6 +113,13 @@ verdichteten Betriebsinformationen:
 - Aktionen: Verbindung testen, Schemata synchronisieren, Zertifikat verwalten,
   privilegierte Credentials prüfen/ersetzen, gehostete Schuldatenbanken anzeigen.
 
+Die Instanzsicht darf trotz sichtbarer Schuldatenbanken nicht zu einer unübersichtlichen
+Megatabelle werden. Sie zeigt standardmäßig verdichtete Kennzahlen, Statusgruppen und auffällige
+Schemata; die vollständige Liste der gehosteten Schuldatenbanken wird über Filter, Suche,
+aufklappbare Bereiche oder eine Instanz-Detailansicht zugänglich. Betreiber müssen zwischen
+"Serverzustand verstehen" und "konkrete Schuldatenbank bearbeiten" wechseln können, ohne die
+Orientierung zu verlieren.
+
 ### Schuldatenbank- und Schulsicht
 
 Schulen sind weiterhin fachlich zentrale Objekte, aber nicht der Container, in dem die ganze
@@ -110,6 +131,12 @@ Schemaverwaltung versteckt wird. Eine Schule erhält eine kompakte Schuldatenban
 - Status, letzter Abgleich, letzter Verbindungstest.
 - Credential-/API-Zugriffszustand.
 - direkte Links in die Instanzsicht und in Detail-/Workflow-Dialoge.
+
+Die fachliche Schuldatenbank-Sicht muss größere Bestände nach Schulträger, Schule und Umgebung
+organisieren können. Eine Schule kann mehrere Datenbanken haben; deshalb darf die UI nicht so tun,
+als gäbe es genau eine Datenbank pro Schule. Betreiber müssen z. B. alle Produktivdatenbanken
+eines Schulträgers, alle Testdatenbanken auf einer Instanz oder alle Schemas mit
+Migrations-/Credential-Problem filtern können.
 
 Die Aktion "Neue Schule anlegen" darf einen Schuldatenbank-Schritt enthalten, soll aber als
 geführter Workflow umgesetzt werden: Schulträger auswählen, Schuldaten erfassen, Zielinstanz

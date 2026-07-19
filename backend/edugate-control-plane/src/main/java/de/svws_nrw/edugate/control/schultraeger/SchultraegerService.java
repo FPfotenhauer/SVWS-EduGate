@@ -152,6 +152,23 @@ public class SchultraegerService {
         });
     }
 
+    public SchultraegerDto reactivate(final String adminSubject, final UUID id) {
+        return operatorAccess.execute(adminSubject, AuditAction.SCHULTRAEGER_REACTIVATE, "schultraeger", connection -> {
+            final String sql = "UPDATE schultraeger SET aktiv = true, updated_at = now() "
+                + "WHERE id = ? RETURNING " + SELECT_COLUMNS;
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setObject(1, id);
+                try (ResultSet resultSet = statement.executeQuery()) {
+                    if (!resultSet.next()) {
+                        throw new OperatorNotFoundException("Schulträger '" + id + "' wurde nicht gefunden.");
+                    }
+                    final SchultraegerDto dto = toDto(resultSet);
+                    return OperatorOutcome.of(dto, id);
+                }
+            }
+        });
+    }
+
     private SchultraegerDto selectById(final java.sql.Connection connection, final UUID id) throws SQLException {
         final String sql = "SELECT " + SELECT_COLUMNS + " FROM schultraeger WHERE id = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {

@@ -76,6 +76,13 @@ public class SchultraegerResource {
         return Response.noContent().build();
     }
 
+    @POST
+    @Path("/{id}/reaktivieren")
+    @Consumes(MediaType.WILDCARD)
+    public SchultraegerDto reactivate(@PathParam("id") final UUID id) {
+        return service.reactivate(adminSubject(), id);
+    }
+
     private String adminSubject() {
         return securityIdentity.getPrincipal().getName();
     }

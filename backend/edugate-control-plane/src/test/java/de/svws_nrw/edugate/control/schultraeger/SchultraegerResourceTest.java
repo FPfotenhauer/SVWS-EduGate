@@ -1,6 +1,7 @@
 package de.svws_nrw.edugate.control.schultraeger;
 
 import static io.restassured.RestAssured.given;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 
 import de.svws_nrw.edugate.control.support.PostgresTestResource;
@@ -8,6 +9,11 @@ import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -95,6 +101,57 @@ class SchultraegerResourceTest {
             .then()
             .statusCode(200)
             .body("aktiv", equalTo(false));
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void reaktivierenSetztAktivWiederAufTrueUndErzeugtAuditEintrag() {
+        final String traegernummer = "REAK-" + UUID.randomUUID();
+        final String createBody = "{\"name\": \"Musterstadt\", \"traegernummer\": \"" + traegernummer + "\"}";
+
+        final String id = given().contentType(ContentType.JSON).body(createBody).when().post(PATH)
+            .then().statusCode(201).extract().path("id");
+
+        given().when().delete(PATH + "/" + id).then().statusCode(204);
+        given().when().get(PATH + "/" + id).then().statusCode(200).body("aktiv", equalTo(false));
+
+        given()
+            .when().post(PATH + "/" + id + "/reaktivieren")
+            .then()
+            .statusCode(200)
+            .body("aktiv", equalTo(true));
+
+        given().when().get(PATH + "/" + id).then().statusCode(200).body("aktiv", equalTo(true));
+
+        assertThat(auditOutcomesFor(UUID.fromString(id), "SCHULTRAEGER_REACTIVATE")).containsExactly("SUCCESS");
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void reaktivierenUnbekannterIdErgibt404() {
+        given()
+            .when().post(PATH + "/" + UUID.randomUUID() + "/reaktivieren")
+            .then()
+            .statusCode(404)
+            .contentType("application/problem+json");
+    }
+
+    private List<String> auditOutcomesFor(final UUID entityId, final String action) {
+        try (Connection connection = PostgresTestResource.openAdminConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                 "SELECT outcome FROM audit_admin WHERE entity_id = ? AND action = ?")) {
+            statement.setObject(1, entityId);
+            statement.setString(2, action);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                final List<String> outcomes = new ArrayList<>();
+                while (resultSet.next()) {
+                    outcomes.add(resultSet.getString("outcome"));
+                }
+                return outcomes;
+            }
+        } catch (final Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Test

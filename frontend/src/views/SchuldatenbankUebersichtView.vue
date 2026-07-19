@@ -32,6 +32,25 @@ const instanzFilter = ref(anfangsInstanzId)
 const umgebungFilter = ref('')
 const statusFilter = ref<SchemaStatus | ''>('')
 
+// Auswahl je Schema-ID, seitenübergreifend - Vorbereitung für spätere Massenaktionen auf
+// ausgewählten Schuldatenbanken (analog SchultraegerListView/SvwsInstanzListView). Aktuell noch
+// ohne eigene Aktion, nur die Auswahl-UI.
+const ausgewaehlt = ref<Record<string, boolean>>({})
+
+const alleAufSeiteAusgewaehlt = computed(
+  () => store.items.length > 0 && store.items.every((eintrag) => ausgewaehlt.value[eintrag.id]),
+)
+const teilweiseAusgewaehlt = computed(
+  () => !alleAufSeiteAusgewaehlt.value && store.items.some((eintrag) => ausgewaehlt.value[eintrag.id]),
+)
+
+function alleAufSeiteUmschalten(): void {
+  const neuerWert = !alleAufSeiteAusgewaehlt.value
+  for (const eintrag of store.items) {
+    ausgewaehlt.value[eintrag.id] = neuerWert
+  }
+}
+
 const statusOptionen: { value: SchemaStatus; label: string }[] = [
   { value: 'GEPLANT', label: 'Geplant' },
   { value: 'VORHANDEN', label: 'Vorhanden' },
@@ -188,6 +207,15 @@ async function neueSchuleAbsenden(): Promise<void> {
         </caption>
         <thead>
           <tr>
+            <th scope="col" class="checkbox-zelle">
+              <input
+                type="checkbox"
+                aria-label="Alle auf dieser Seite auswählen"
+                :checked="alleAufSeiteAusgewaehlt"
+                :indeterminate="teilweiseAusgewaehlt"
+                @change="alleAufSeiteUmschalten"
+              />
+            </th>
             <th scope="col">Schulträger</th>
             <th scope="col">Schule</th>
             <th scope="col">Schemaname</th>
@@ -200,6 +228,13 @@ async function neueSchuleAbsenden(): Promise<void> {
         </thead>
         <tbody>
           <tr v-for="eintrag in store.items" :key="eintrag.id">
+            <td class="checkbox-zelle">
+              <input
+                v-model="ausgewaehlt[eintrag.id]"
+                type="checkbox"
+                :aria-label="`'${eintrag.schemaName}' auswählen`"
+              />
+            </td>
             <td>{{ eintrag.schultraegerName }}</td>
             <td>{{ eintrag.schulnummer }} – {{ eintrag.schuleName }}</td>
             <td>{{ eintrag.schemaName }}</td>
@@ -226,7 +261,7 @@ async function neueSchuleAbsenden(): Promise<void> {
             </td>
           </tr>
           <tr v-if="store.items.length === 0">
-            <td colspan="8">Keine Schuldatenbanken gefunden.</td>
+            <td colspan="9">Keine Schuldatenbanken gefunden.</td>
           </tr>
         </tbody>
       </table>
@@ -344,6 +379,27 @@ main {
   max-width: 24rem;
 }
 
+.feld select,
+.feld textarea {
+  font: inherit;
+  padding: 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.feld select {
+  cursor: pointer;
+}
+
+.feld select:focus-visible,
+.feld textarea:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-color: var(--accent);
+}
+
 .aktionen {
   display: flex;
   gap: 1rem;
@@ -419,6 +475,12 @@ tbody tr:hover {
 .btn-klein {
   padding: 0.2rem 0.6rem;
   font-size: 0.85em;
+}
+
+.checkbox-zelle {
+  width: 1%;
+  padding-right: 0;
+  text-align: center;
 }
 
 .status {

@@ -10,6 +10,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -177,6 +178,40 @@ class HttpSvwsConnectionTesterTest {
         final SvwsConnectionTestResult result = tester.testReachability("keine-url");
 
         assertThat(result.success()).isFalse();
+    }
+
+    @Test
+    void test_mitBlockiertemZielnetz_liefertSicherenFehlschlagOhneVerbindungsversuch() throws IOException {
+        server = startServer(exchange -> respond(exchange, 200, "true"));
+        final HttpSvwsConnectionTester guardedTester =
+            new HttpSvwsConnectionTester(SHORT_TIMEOUT, SHORT_TIMEOUT, null, SvwsTargetGuard.defaultDeny());
+
+        final SvwsConnectionTestResult result = guardedTester.test(baseUrl(server), "user", "pass");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).doesNotContain("127.0.0.1");
+    }
+
+    @Test
+    void testReachability_mitBlockiertemZielnetz_liefertSicherenFehlschlagOhneVerbindungsversuch() throws IOException {
+        server = startServer(exchange -> respond(exchange, 200, "SVWS-Server erreichbar"));
+        final HttpSvwsConnectionTester guardedTester =
+            new HttpSvwsConnectionTester(SHORT_TIMEOUT, SHORT_TIMEOUT, null, SvwsTargetGuard.defaultDeny());
+
+        final SvwsConnectionTestResult result = guardedTester.testReachability(baseUrl(server));
+
+        assertThat(result.success()).isFalse();
+    }
+
+    @Test
+    void test_mitFreigegebenemZielnetz_ruftServerTrotzdemAuf() throws IOException {
+        server = startServer(exchange -> respond(exchange, 200, "true"));
+        final HttpSvwsConnectionTester guardedTester = new HttpSvwsConnectionTester(
+            SHORT_TIMEOUT, SHORT_TIMEOUT, null, SvwsTargetGuard.withAllowedNetworks(List.of("127.0.0.1/32")));
+
+        final SvwsConnectionTestResult result = guardedTester.test(baseUrl(server), "user", "pass");
+
+        assertThat(result.success()).isTrue();
     }
 
     private static HttpServer startServer(final HttpHandler handler) throws IOException {

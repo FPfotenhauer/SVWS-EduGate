@@ -36,3 +36,7 @@ export function updateSchultraeger(
 export function deactivateSchultraeger(id: string, getAccessToken: AccessTokenProvider): Promise<void> {
   return apiRequest<void>(`${BASE_PATH}/${id}`, { method: 'DELETE', getAccessToken })
 }
+
+export function reactivateSchultraeger(id: string, getAccessToken: AccessTokenProvider): Promise<Schultraeger> {
+  return apiRequest<Schultraeger>(`${BASE_PATH}/${id}/reaktivieren`, { method: 'POST', getAccessToken })
+}

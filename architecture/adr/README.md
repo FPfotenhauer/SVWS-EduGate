@@ -22,6 +22,8 @@ Dieser Ordner enthält alle Architecture Decision Records für SVWS-EduGate im [
 | [ADR-014](./ADR-014-verwendung-echter-privileged-api-aufrufe.md) | Verwendung echter Aufrufe der SVWS-Privileged-API | proposed |
 | [ADR-015](./ADR-015-rollen-und-rechte-management.md) | Rollen- und Rechte-Management für Betreiber und API-Gateway | proposed |
 | [ADR-016](./ADR-016-deployment-und-auslieferungsmodell.md) | Deployment- und Auslieferungsmodell | proposed |
+| [ADR-017](./ADR-017-backup-konzept-schulschemata.md) | Backup-Konzept für Schulschemata | proposed |
+| [ADR-018](./ADR-018-exportformat-verbindungsdaten-schuldatenbanken.md) | Exportformat für Verbindungsdaten von Schuldatenbanken | proposed |
 
 ## Neues ADR anlegen
 

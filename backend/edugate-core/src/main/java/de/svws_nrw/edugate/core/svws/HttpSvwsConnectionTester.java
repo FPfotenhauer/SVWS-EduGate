@@ -41,9 +41,11 @@ public final class HttpSvwsConnectionTester implements SvwsConnectionTester {
 
     private final HttpClient httpClient;
     private final Duration requestTimeout;
+    private final SvwsTargetGuard targetGuard;
 
+    /** Verwendet {@link SvwsTargetGuard#defaultDeny()} - sicherster Default ohne weitere Konfiguration. */
     public HttpSvwsConnectionTester() {
-        this(Duration.ofSeconds(5), Duration.ofSeconds(8), null);
+        this(Duration.ofSeconds(5), Duration.ofSeconds(8), null, SvwsTargetGuard.defaultDeny());
     }
 
     /**
@@ -52,27 +54,46 @@ public final class HttpSvwsConnectionTester implements SvwsConnectionTester {
      *      vertrauen. {@code null} verwendet die Standard-JVM-Vertrauenskette (Produktionsfall).
      */
     public HttpSvwsConnectionTester(final SSLContext sslContext) {
-        this(Duration.ofSeconds(5), Duration.ofSeconds(8), sslContext);
+        this(Duration.ofSeconds(5), Duration.ofSeconds(8), sslContext, SvwsTargetGuard.defaultDeny());
+    }
+
+    /**
+     * @param sslContext optional, siehe {@link #HttpSvwsConnectionTester(SSLContext)}.
+     * @param targetGuard SSRF-Schutz (Issue #17) - entscheidet, gegen welche aufgelösten
+     *      Zieladressen Verbindungstests überhaupt zugelassen werden.
+     */
+    public HttpSvwsConnectionTester(final SSLContext sslContext, final SvwsTargetGuard targetGuard) {
+        this(Duration.ofSeconds(5), Duration.ofSeconds(8), sslContext, targetGuard);
     }
 
     HttpSvwsConnectionTester(final Duration connectTimeout, final Duration requestTimeout) {
-        this(connectTimeout, requestTimeout, null);
+        this(connectTimeout, requestTimeout, null, SvwsTargetGuard.allowAll());
     }
 
     HttpSvwsConnectionTester(final Duration connectTimeout, final Duration requestTimeout, final SSLContext sslContext) {
+        this(connectTimeout, requestTimeout, sslContext, SvwsTargetGuard.allowAll());
+    }
+
+    HttpSvwsConnectionTester(
+            final Duration connectTimeout,
+            final Duration requestTimeout,
+            final SSLContext sslContext,
+            final SvwsTargetGuard targetGuard) {
         final HttpClient.Builder builder = HttpClient.newBuilder().connectTimeout(connectTimeout);
         if (sslContext != null) {
             builder.sslContext(sslContext);
         }
         this.httpClient = builder.build();
         this.requestTimeout = requestTimeout;
+        this.targetGuard = targetGuard;
     }
 
     @Override
     public SvwsConnectionTestResult test(final String baseUrl, final String username, final String password) {
+        final URI uri;
         final HttpRequest.Builder requestBuilder;
         try {
-            final URI uri = URI.create(stripTrailingSlash(baseUrl) + CHECK_ROOT_PRIVS_PATH);
+            uri = URI.create(stripTrailingSlash(baseUrl) + CHECK_ROOT_PRIVS_PATH);
             final String body = "{\"user\":" + jsonString(username) + ",\"password\":" + jsonString(password) + "}";
             requestBuilder = HttpRequest.newBuilder(uri)
                 .header("Authorization", basicAuthHeader(username, password))
@@ -80,6 +101,11 @@ public final class HttpSvwsConnectionTester implements SvwsConnectionTester {
                 .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
         } catch (final IllegalArgumentException e) {
             return SvwsConnectionTestResult.failure("Die Base-URL ist technisch ungültig.");
+        }
+
+        final SvwsConnectionTestResult targetRejection = rejectDisallowedTarget(uri);
+        if (targetRejection != null) {
+            return targetRejection;
         }
 
         return send(requestBuilder, response -> {
@@ -98,12 +124,18 @@ public final class HttpSvwsConnectionTester implements SvwsConnectionTester {
 
     @Override
     public SvwsConnectionTestResult testReachability(final String baseUrl) {
+        final URI uri;
         final HttpRequest.Builder requestBuilder;
         try {
-            final URI uri = URI.create(stripTrailingSlash(baseUrl) + ALIVE_PATH);
+            uri = URI.create(stripTrailingSlash(baseUrl) + ALIVE_PATH);
             requestBuilder = HttpRequest.newBuilder(uri).GET();
         } catch (final IllegalArgumentException e) {
             return SvwsConnectionTestResult.failure("Die Base-URL ist technisch ungültig.");
+        }
+
+        final SvwsConnectionTestResult targetRejection = rejectDisallowedTarget(uri);
+        if (targetRejection != null) {
+            return targetRejection;
         }
 
         return send(requestBuilder, response -> {
@@ -114,6 +146,19 @@ public final class HttpSvwsConnectionTester implements SvwsConnectionTester {
             }
             return SvwsConnectionTestResult.failure("SVWS-Instanz antwortete mit Status " + status + ".");
         });
+    }
+
+    /**
+     * SSRF-Schutz (Issue #17): löst den Host der Ziel-URI auf und prüft ihn gegen
+     * {@link #targetGuard}, bevor überhaupt ein Request gebaut/gesendet wird. Die Meldung bleibt
+     * bewusst generisch - sie verrät weder die aufgelöste Adresse noch den Blockierungsgrund.
+     */
+    private SvwsConnectionTestResult rejectDisallowedTarget(final URI uri) {
+        final String host = uri.getHost();
+        if (host == null || !targetGuard.isAllowed(host)) {
+            return SvwsConnectionTestResult.failure("Zielhost ist für Verbindungstests nicht zugelassen.");
+        }
+        return null;
     }
 
     private SvwsConnectionTestResult send(

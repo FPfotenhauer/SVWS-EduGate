@@ -57,11 +57,31 @@ export const useSchultraegerStore = defineStore('schultraeger', () => {
     await fetchList()
   }
 
+  async function reactivate(id: string): Promise<Schultraeger> {
+    const reaktiviert = await schultraegerApi.reactivateSchultraeger(id, accessToken)
+    await fetchList()
+    return reaktiviert
+  }
+
   function get(id: string): Promise<Schultraeger> {
     return schultraegerApi.getSchultraeger(id, accessToken)
   }
 
-  return { items, page, size, totalElements, query, loading, errorMessage, fetchList, create, update, deactivate, get }
+  return {
+    items,
+    page,
+    size,
+    totalElements,
+    query,
+    loading,
+    errorMessage,
+    fetchList,
+    create,
+    update,
+    deactivate,
+    reactivate,
+    get,
+  }
 })
 
 function toErrorMessage(error: unknown): string {

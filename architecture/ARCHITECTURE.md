@@ -45,8 +45,8 @@ SVWS-EduGate ist ein Werkzeug für **Dienstleister**, die SVWS-Server für mehre
 | Randbedingung | Erläuterung |
 |---------------|-------------|
 | SVWS-Server-API | Einziger Zugriffsweg auf Schuldaten. Kein direkter Zugriff auf die MariaDB der SVWS-Server durch EduGate. |
-| MariaDB-Schemastruktur | Ein Schema je Schule und Umgebung (Produktiv, Test) auf der jeweiligen SVWS-Instanz. |
-| Container-Betrieb | Auslieferung als Container-Images; Entwicklung mit Docker Compose. |
+| MariaDB-Schemastruktur | Ein Schema je Schule und Umgebung (z. B. Produktiv, Test, Schulung) auf der jeweiligen SVWS-Instanz. |
+| Container-Betrieb | Zielbild: Auslieferung als Container-Images; Entwicklung mit Docker Compose. Betreiber sollen nicht aus dem Source-Tree bauen müssen (ADR-016). |
 | TLS | Konfiguration nach BSI TR-02102-2 (mind. TLS 1.2 mit starken Cipher-Suiten, bevorzugt TLS 1.3). |
 
 ### Organisatorische / regulatorische Randbedingungen
@@ -78,7 +78,7 @@ flowchart TB
 
     subgraph traeger["Schulträger A … N (Mandanten)"]
         svws["SVWS-Server-Instanzen<br/>(geteilte Betriebsressource, ADR-011)"]
-        db[("MariaDB<br/>Schemas: Produktiv, Test")]
+        db[("MariaDB<br/>Schemas: Produktiv, Test, Schulung, ...")]
     end
 
     admin -->|"HTTPS, OIDC-Login"| cp
@@ -92,7 +92,15 @@ flowchart TB
 
 **Fachlicher Kontext:** Der Dienstleister-Admin verwaltet über die Control Plane die Mandantenhierarchie (Schulträger → Schule → Schema) und die zugehörigen SVWS-Instanzen. API-Clients rufen Schuldaten ausschließlich über das Gateway ab – niemals direkt vom SVWS-Server und niemals mit dessen Zugangsdaten.
 
-**Abgrenzung (out of scope, Phase 1):** Selbstverwaltung durch Schulträger, externe API-Clients, Provisionierung neuer SVWS-Instanzen (Deployment-Automatisierung), Schreibzugriffe über das Gateway.
+**Aktueller Implementierungsstand:** Die Control Plane verwaltet Schulträger, Schulen,
+SVWS-Instanzen, Schuldatenbanken/Schemata und Schema-Umgebungen in EduGates PostgreSQL. Sie ruft den
+SVWS-Server aktuell nur für Verbindungstests auf. Das Gateway ist ein Skeleton mit OIDC, Health und
+`/ping`.
+
+**Abgrenzung für die nächsten Ausbaustufen:** echte SVWS-Privileged-API-Operationen (Schema
+anlegen, löschen, migrieren, importieren, exportieren), Gateway-Proxying auf die SVWS-External-API,
+Selbstverwaltung durch Schulträger, externe API-Clients, Provisionierung neuer SVWS-Instanzen und
+Schreibzugriffe über das Gateway.
 
 ---
 
@@ -109,6 +117,9 @@ flowchart TB
 | SVWS-Zugangsdaten schützen | Credentials verlassen niemals das Backend; verschlüsselte Ablage (AES-256-GCM). | [ADR-006](./adr/ADR-006-secret-handling-svws-credentials.md) |
 | Spätere externe Öffnung ohne Umbau | Netzzonenkonzept von Beginn an; externe Zone wird später nur „dazugeschaltet“. | [ADR-007](./adr/ADR-007-netzzonenkonzept.md) |
 | SVWS-Instanzen werden von mehreren Schulträgern gemeinsam betrieben | `svws_instanz` ohne `tenant_id`, keine 1:1-/1:n-Bindung an einen Schulträger; Mandantenzuordnung ausschließlich über `schema`; Verwaltung über `OperatorAccess`. | [ADR-011](./adr/ADR-011-svws-instanz-als-geteilte-betriebsressource.md) |
+| Schuldatenbanken strukturiert verwalten | Schuldatenbanken/Schemata bleiben tenant-gebunden unterhalb der Schule; Umgebung ist erweiterbarer Betreiberwert; echte SVWS-Operationen werden vorbereitet, aber nicht beiläufig in CRUD eingebaut. | [ADR-012](./adr/ADR-012-schemaverwaltung-und-schuldatenbanken.md), [ADR-014](./adr/ADR-014-verwendung-echter-privileged-api-aufrufe.md) |
+| Betreiber-UI für große Bestände | Zwei Sichten: SVWS-Instanzen als Serverperspektive und Schuldatenbanken als Schul-/Schema-Perspektive mit Gruppierung, Filterung und Kontextnavigation. | [ADR-013](./adr/ADR-013-betreiber-ui-schemaverwaltung.md) |
+| Deployment, Backup und Secret-Übergabe betreiberfähig machen | Produktive Auslieferung über versionierte Artefakte; MariaDB-native Schulschema-Backups als Default; SOPS/age-Export für schulbezogene Verbindungsdaten. | [ADR-016](./adr/ADR-016-deployment-und-auslieferungsmodell.md), [ADR-017](./adr/ADR-017-backup-konzept-schulschemata.md), [ADR-018](./adr/ADR-018-exportformat-verbindungsdaten-schuldatenbanken.md) |
 
 Übergreifende Prinzipien: API-first gegen die SVWS-API, Security by Design, stateless Services, Clean Architecture (Ports & Adapters) im Backend.
 
@@ -202,7 +213,7 @@ erDiagram
 
 ## 6. Laufzeitsicht
 
-### Szenario 1: Admin synchronisiert eine SVWS-Instanz (Control Plane)
+### Szenario 1: Admin testet eine SVWS-Instanz (Control Plane, aktuell umgesetzt)
 
 ```mermaid
 sequenceDiagram
@@ -212,17 +223,23 @@ sequenceDiagram
     participant PG as PostgreSQL
     participant SVWS as SVWS-Server
 
-    Admin->>SPA: Klick "Synchronisieren"
-    SPA->>CP: POST /admin/api/v1/instanzen/{id}/sync (Bearer-Token)
+    Admin->>SPA: Klick "Verbindung testen"
+    SPA->>CP: POST /admin/api/v1/svws-instanzen/{id}/connection-test (Bearer-Token)
     CP->>CP: Token- & Rollenprüfung (dienstleister-admin)
-    CP->>PG: Instanz + Credentials laden (entschlüsseln)
-    CP->>SVWS: GET /api/schema/liste (privilegiert)
-    SVWS-->>CP: Schemaliste
-    CP->>PG: Schemas & Status aktualisieren, lastSync setzen
-    CP-->>SPA: 200 OK (Sync-Ergebnis)
+    CP->>PG: Instanz + optional verschlüsselte Credentials laden
+    alt keine Credentials hinterlegt
+        CP->>SVWS: GET /status/alive
+        SVWS-->>CP: Alive-Status
+        CP->>PG: Status DEGRADED/UNREACHABLE + sichere Meldung speichern
+    else Credentials hinterlegt
+        CP->>SVWS: POST /api/schema/root/user/checkrootprivs
+        SVWS-->>CP: true/false oder Fehlerstatus
+        CP->>PG: Status OK/UNREACHABLE + sichere Meldung speichern
+    end
+    CP-->>SPA: 200 OK (aktualisierte Instanz ohne Secret-Werte)
 ```
 
-### Szenario 2: API-Client ruft Schuldaten ab (Data Plane)
+### Szenario 2: API-Client ruft Schuldaten ab (Data Plane, Zielbild)
 
 ```mermaid
 sequenceDiagram
@@ -243,7 +260,10 @@ sequenceDiagram
     GW-->>Client: Response
 ```
 
-Zentrale Invariante: **Die SVWS-Credentials sind zu keinem Zeitpunkt Teil einer Antwort an einen Client.** Clients kennen ausschließlich ihr eigenes OIDC-Token mit eng begrenztem Scope.
+Zentrale Invariante: **Die SVWS-Credentials sind zu keinem Zeitpunkt Teil einer Antwort an einen
+Client.** Clients kennen ausschließlich ihr eigenes OIDC-Token mit eng begrenztem Scope. Dieses
+Gateway-Szenario ist Zielbild; der aktuelle Gateway-Service prüft OIDC und Health, proxyt aber noch
+keine SVWS-External-API-Aufrufe.
 
 ---
 
@@ -289,6 +309,12 @@ Details zu Zonen, Firewall-Regeln und der Ausbaustufe „extern“: [ADR-007](./
 
 - **Mandantenfähigkeit:** `tenant_id` (= Schulträger) auf jeder Tabelle; PostgreSQL Row-Level Security mit `FORCE`; Mandantenkontext wird pro Request aus dem Token abgeleitet, nie aus Client-Parametern allein ([ADR-002](./adr/ADR-002-mandantenmodell-postgresql-rls.md), Wurzeltabelle: [ADR-008](./adr/ADR-008-rls-wurzeltabelle-schultraeger.md)). Mandantenübergreifende Admin-Operationen laufen ausschließlich über den auditierten Operator-Pfad ([ADR-009](./adr/ADR-009-operator-zugriff-und-audit.md)).
 - **Sicherheit:** OIDC überall; TLS nach BSI TR-02102-2; mTLS in internen Zonen; Security-Header und CSP im Frontend; keine Secrets im Frontend oder in Logs.
+- **Gefährliche Operationen:** echte SVWS-Privileged-API-Aufrufe für Schema-Anlage, Migration,
+  Import, Export, Deaktivierung oder Löschung sind eigene geschützte Workflows mit
+  Berechtigungsprüfung, Bestätigung, Statusführung und Audit ([ADR-014](./adr/ADR-014-verwendung-echter-privileged-api-aufrufe.md)).
+- **Secret-Übergabe:** Schulbezogene Verbindungsdaten sollen später als SOPS/age-verschlüsseltes
+  Bundle in Betreiber-Vaults exportierbar sein; privilegierte SVWS-/MariaDB-/Root-Secrets bleiben
+  davon getrennt ([ADR-018](./adr/ADR-018-exportformat-verbindungsdaten-schuldatenbanken.md)).
 - **Protokollierung:** Strukturierte Logs (JSON); getrenntes, unveränderliches Audit-Log für Gateway-Zugriffe (OPS.1.1.5, DSGVO Art. 32); keine personenbezogenen Nutzdaten in Logs.
 - **Fehlerbehandlung:** SVWS-Instanzen können nicht erreichbar sein – Statusmodell je Instanz (OK, DEGRADED, UNREACHABLE), Timeouts und Circuit-Breaker im Gateway.
 - **Konfiguration:** 12-Factor, Konfiguration über Umgebungsvariablen; `.env.example` im Repo, niemals reale Secrets.
@@ -314,6 +340,8 @@ Alle Entscheidungen als ADRs unter [`architecture/adr/`](./adr/README.md).
 | Eigenbau-Gateway erreicht Funktionsgrenzen (Rate-Limiting, Plugins). | Austauschoption Kong/APISIX in [ADR-004](./adr/ADR-004-api-gateway-eigenbau.md) dokumentiert; Gateway-API stabil halten. |
 | Schlüsselverlust für Credential-Verschlüsselung. | Key-Rotation-Konzept, dokumentiertes Re-Encrypt-Verfahren ([ADR-006](./adr/ADR-006-secret-handling-svws-credentials.md)). |
 | Row-Level Security wird bei neuen Tabellen vergessen. | Migrations-Checkliste + automatisierter Test, der RLS auf allen Tenant-Tabellen prüft. |
+| Echte SVWS-Privileged-API-Operationen werden zu früh oder zu beiläufig angebunden. | ADR-014 erzwingt dedizierte Ports/Adapter, Bestätigung, Audit und klare Statusübergänge. |
+| Betreiber übernehmen Dev-Deployment oder Dev-Truststore in Produktion. | ADR-016 und Security-Härtungs-Issues trennen Entwicklungssetup und produktiven Betrieb. |
 
 ## 12. Glossar
 

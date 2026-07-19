@@ -344,6 +344,27 @@ main {
   max-width: 24rem;
 }
 
+.feld select,
+.feld textarea {
+  font: inherit;
+  padding: 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.feld select {
+  cursor: pointer;
+}
+
+.feld select:focus-visible,
+.feld textarea:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-color: var(--accent);
+}
+
 .aktionen {
   display: flex;
   gap: 1rem;

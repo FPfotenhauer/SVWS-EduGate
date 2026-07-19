@@ -407,7 +407,7 @@ function formatiereZeitpunkt(iso: string | null): string {
 
       <div class="aktionen">
         <button type="submit" class="button-primary" :disabled="speichern">Speichern</button>
-        <RouterLink :to="{ name: 'svws-instanz-liste' }">Abbrechen</RouterLink>
+        <RouterLink :to="{ name: 'svws-instanz-liste' }" class="button-secondary">Abbrechen</RouterLink>
       </div>
     </form>
   </main>

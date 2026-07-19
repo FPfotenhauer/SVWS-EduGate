@@ -4,7 +4,10 @@
    können. Domänenspezifische Tokens (Notenstufen, Konferenz-Chrome, PrimeVue-Overrides)
    sind bewusst nicht übernommen – siehe ADR-010. */
 :root {
-  color-scheme: light dark;
+  /* An die eigene .dark-Klasse gekoppelt (siehe useTheme.ts), nicht an die
+     Browser-/OS-Präferenz: sonst rendern native Steuerelemente (Checkboxen, Scrollbars, ...)
+     weiterhin im OS-Dark-Stil, selbst wenn hier explizit "Hell" gewählt wurde. */
+  color-scheme: light;
 
   --bg-a: #edfbf4;
   --bg-b: #f0fdf9;
@@ -30,6 +33,8 @@
 }
 
 :root.dark {
+  color-scheme: dark;
+
   --bg-a: #091c19;
   --bg-b: #0c1a14;
   --surface: #142b25;

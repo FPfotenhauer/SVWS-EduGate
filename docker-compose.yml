@@ -66,6 +66,12 @@ services:
       context: ./backend
       dockerfile: edugate-control-plane/src/main/docker/Dockerfile.jvm
     environment:
+      # Läuft als gepacktes Jar (kein `quarkus:dev`), würde also ohne diese Variable im
+      # %prod-Profil starten - inklusive dessen strikterer Härtung (u. a. Pflicht-OIDC-Issuer,
+      # SVWS-Ziel-Allowlist, Issues #15/#17). Da dieses Compose-File laut Kopfkommentar
+      # ausschließlich die lokale Entwicklungsumgebung abbildet, ist %dev hier korrekt - eine
+      # echte Produktionsauslieferung nutzt dieses File nicht (siehe ADR-016).
+      QUARKUS_PROFILE: dev
       EDUGATE_DB_HOST: postgres
       EDUGATE_DB_PORT: "5432"
       EDUGATE_DB_NAME: ${POSTGRES_DB}
@@ -104,6 +110,8 @@ services:
       context: ./backend
       dockerfile: edugate-gateway/src/main/docker/Dockerfile.jvm
     environment:
+      # Siehe Kommentar bei control-plane weiter oben - gleiche Begründung.
+      QUARKUS_PROFILE: dev
       EDUGATE_DB_HOST: postgres
       EDUGATE_DB_PORT: "5432"
       EDUGATE_DB_NAME: ${POSTGRES_DB}

@@ -52,12 +52,19 @@ diese Dokumente kurz ein, ersetzt sie aber nicht.
 
 ## Aktueller Stand
 
-Der aktuelle Implementierungsstand ist der erste vertikale Durchstich: Schulträger-Verwaltung
-(Anlegen, Auflisten, Anzeigen, Bearbeiten, Deaktivieren) über Control-Plane-API und Admin-SPA, mit
-aktiver Row-Level Security und auditiertem Admin-Zugriff (siehe
-[`README.md`](../README.md) im Repository-Root).
+Der aktuelle Implementierungsstand umfasst eine nutzbare Admin-SPA und Control-Plane-API für:
 
-Diese `docs/`-Struktur bildet den Rahmen für die weitere Dokumentation. Sie wächst mit dem
-Projekt – insbesondere Verwaltung von Schulen, SVWS-Instanzen und Schemas, Gateway-Betrieb und
-spätere Ausbaustufen (externe API-Clients, Schulträger-Self-Service) werden ergänzt, sobald sie
-implementiert sind.
+- Schulträger,
+- Schulen und Ansprechpartner,
+- SVWS-Instanzen inklusive verschlüsselter Zugangsdaten und Verbindungstest,
+- Schuldatenbanken/Schemata je Schule und Umgebung,
+- eine mandantenübergreifende Schuldatenbank-Übersicht,
+- betreiberseitig verwaltbare Schema-Umgebungen.
+
+Die Daten werden mit PostgreSQL Row-Level Security und auditiertem Admin-Zugriff geschützt. Der
+Gateway-Service ist weiterhin nur als OIDC-/Health-/`/ping`-Skeleton vorhanden; Proxy-Logik und
+echte Gateway-Mandantenauflösung folgen später.
+
+Wichtig: Schuldatenbanken werden aktuell in EduGate geplant und verwaltet. Echte
+SVWS-Privileged-API-Operationen wie Schema-Anlage, Migration, Import, Export oder Löschen sind noch
+nicht verdrahtet und werden nach ADR-014 als eigene, geschützte Workflows umgesetzt.

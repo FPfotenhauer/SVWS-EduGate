@@ -46,6 +46,10 @@ Abschnitt „Tests“):
 - **Audit-Invarianten** – genau ein `audit_admin`-Eintrag je Operation, Fehler-Audit übersteht
   Rollback, kein `UPDATE`/`DELETE` auf `audit_admin` für Anwendungsrollen
   ([ADR-009](../../architecture/adr/ADR-009-operator-zugriff-und-audit.md)).
+- **Schemaverwaltung** – Tests für Schulen, Schuldatenbanken, Schema-Umgebungen,
+  Geschäftsregeln, RLS und Fehlerfälle ([ADR-012](../../architecture/adr/ADR-012-schemaverwaltung-und-schuldatenbanken.md)).
+- **SVWS-Verbindungstest** – prüft Erreichbarkeit bzw. privilegierte Zugangsdaten über den
+  `SvwsConnectionTester`-Port, ohne Secret-Werte in Antworten oder Meldungen zu leaken.
 - **ArchUnit-Test** – die `operator`-Datasource wird ausschließlich innerhalb des
   `OperatorAccess`-Packages referenziert.
 - **SecretStore-Tests** – Verschlüsselungs-Roundtrip und Erkennung manipulierter Chiffrate
@@ -60,8 +64,8 @@ ist ein Nachweis, nicht nur eine Qualitätssicherungsmaßnahme (vgl.
 ```text
 backend/                  Maven-Multi-Module (Java 21, Quarkus)
   edugate-core/            Domänenmodell, SecretStore-Port, keine Quarkus-Laufzeitabhängigkeiten
-  edugate-control-plane/   REST-API /admin/api/v1, Mandantenmodell mit PostgreSQL-RLS
-  edugate-gateway/         Data-Plane-Service (Gateway)
+  edugate-control-plane/   REST-API /admin/api/v1, Control-Plane-Verwaltung, PostgreSQL-RLS
+  edugate-gateway/         Data-Plane-Service (aktuell OIDC/Health/ping-Skeleton)
 frontend/                 Vue 3, TypeScript, Vite, Pinia (Admin-SPA)
 architecture/              ARCHITECTURE.md und ADRs
 compliance/                Sicherheits- und Compliance-Dokumentation

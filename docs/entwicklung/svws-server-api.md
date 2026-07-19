@@ -49,8 +49,7 @@ EduGate pro `svws_instanz` verschlüsselt ablegt** (ADR-006, `SvwsInstanzCredent
 `SvwsInstanzService.setCredentials`) – mit diesem Benutzer lassen sich über die API Schemata
 angelegt, gelöscht und anderweitig verwaltet werden, daher „privilegiert".
 
-Für die spätere Schul-Schema-Verwaltung (nicht Teil des aktuellen Auftrags, aber vorbereitet)
-relevante Endpunkte:
+Für die echte SVWS-Anbindung der Schul-Schema-Verwaltung nach ADR-014 relevante Endpunkte:
 
 - Liste: `GET /api/schema/liste/svws`, `GET /api/schema/liste/alle`
 - Anlegen: `POST /api/schema/create/{schema}` (bzw. `/init/{schulnummer}`, `/{revision}`-Varianten)
@@ -58,6 +57,11 @@ relevante Endpunkte:
 - (De-)Aktivieren: `POST /api/schema/root/schema/{schema}/deactivated/{state}`
 - Migration: `POST /api/schema/migrate/{schema}/{mariadb|mysql|mssql|mdb}`
 - Export/Import: `GET /api/schema/export/{schema}/{sqlite|zip}`, `POST /api/schema/import/{schema}/sqlite`
+
+Diese Endpunkte sind in EduGate aktuell noch nicht produktiv verdrahtet. Die bestehende
+Schemaverwaltung schreibt zunächst EduGates eigene PostgreSQL-Tabellen (`schule`, `schema`,
+`schema_umgebung`) und setzt neue Schuldatenbanken auf den Status `GEPLANT`. Nur der
+Verbindungstest spricht bereits aktiv mit dem SVWS-Server.
 
 **Verbindungstest** (`edugate-core/.../svws/HttpSvwsConnectionTester`): ruft
 `POST /api/schema/root/user/checkrootprivs` auf (Request-Body `BenutzerKennwort { user, password }`,

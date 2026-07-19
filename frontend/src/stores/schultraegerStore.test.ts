@@ -87,6 +87,23 @@ describe('schultraegerStore', () => {
     expect(deactivateSpy).toHaveBeenCalledWith(beispielSchultraeger.id, expect.any(Function))
   })
 
+  it('reactivate ruft die API mit der id auf und lädt die Liste danach neu', async () => {
+    const reaktivierterSchultraeger = { ...beispielSchultraeger, aktiv: true }
+    const reactivateSpy = vi
+      .spyOn(schultraegerApi, 'reactivateSchultraeger')
+      .mockResolvedValue(reaktivierterSchultraeger)
+    const listSpy = vi
+      .spyOn(schultraegerApi, 'listSchultraeger')
+      .mockResolvedValue({ items: [reaktivierterSchultraeger], page: 0, size: 25, totalElements: 1 })
+
+    const store = useSchultraegerStore()
+    const result = await store.reactivate(beispielSchultraeger.id)
+
+    expect(reactivateSpy).toHaveBeenCalledWith(beispielSchultraeger.id, expect.any(Function))
+    expect(listSpy).toHaveBeenCalled()
+    expect(result).toEqual(reaktivierterSchultraeger)
+  })
+
   it('fetchList übernimmt Seiten- und Suchparameter für den nächsten Aufruf', async () => {
     const listSpy = vi
       .spyOn(schultraegerApi, 'listSchultraeger')

@@ -69,6 +69,11 @@ async function bestaetigenDeaktivieren(): Promise<void> {
   await router.push({ name: 'schultraeger-liste' })
 }
 
+async function reaktivieren(): Promise<void> {
+  if (!props.id) return
+  geladenerSchultraeger.value = await store.reactivate(props.id)
+}
+
 async function absenden(): Promise<void> {
   fehler.value = null
   speichern.value = true
@@ -235,16 +240,19 @@ async function bestaetigenAnsprechpartnerLoeschen(): Promise<void> {
         </div>
       </dl>
 
-      <section v-if="geladenerSchultraeger?.aktiv" class="operationen">
+      <section v-if="geladenerSchultraeger" class="operationen">
         <h2>Operationen</h2>
         <div class="operationen-grid">
-          <article class="operation-karte gefahr">
+          <article v-if="geladenerSchultraeger.aktiv" class="operation-karte gefahr">
             <h3>Schulträger deaktivieren</h3>
-            <p>
-              Ein deaktivierter Schulträger bleibt erhalten, ist aber nicht mehr aktiv nutzbar. Diese Aktion kann über
-              die Oberfläche aktuell nicht rückgängig gemacht werden.
-            </p>
+            <p>Ein deaktivierter Schulträger bleibt erhalten, ist aber nicht mehr aktiv nutzbar.</p>
             <button type="button" class="danger" @click="zuDeaktivierenBestaetigen = true">Deaktivieren</button>
+          </article>
+
+          <article v-else class="operation-karte">
+            <h3>Schulträger reaktivieren</h3>
+            <p>Der Schulträger wird wieder aktiv nutzbar.</p>
+            <button type="button" class="button-primary" @click="reaktivieren">Reaktivieren</button>
           </article>
         </div>
       </section>

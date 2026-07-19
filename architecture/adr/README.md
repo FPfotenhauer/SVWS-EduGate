@@ -19,6 +19,9 @@ Dieser Ordner enthält alle Architecture Decision Records für SVWS-EduGate im [
 | [ADR-011](./ADR-011-svws-instanz-als-geteilte-betriebsressource.md) | SVWS-Instanz als geteilte, mandantenübergreifende Betriebsressource | accepted |
 | [ADR-012](./ADR-012-schemaverwaltung-und-schuldatenbanken.md) | Schemaverwaltung und Schuldatenbanken | accepted |
 | [ADR-013](./ADR-013-betreiber-ui-schemaverwaltung.md) | Betreiber-UI für Schemaverwaltung und Schuldatenbanken | accepted |
+| [ADR-014](./ADR-014-verwendung-echter-privileged-api-aufrufe.md) | Verwendung echter Aufrufe der SVWS-Privileged-API | proposed |
+| [ADR-015](./ADR-015-rollen-und-rechte-management.md) | Rollen- und Rechte-Management für Betreiber und API-Gateway | proposed |
+| [ADR-016](./ADR-016-deployment-und-auslieferungsmodell.md) | Deployment- und Auslieferungsmodell | proposed |
 
 ## Neues ADR anlegen
 

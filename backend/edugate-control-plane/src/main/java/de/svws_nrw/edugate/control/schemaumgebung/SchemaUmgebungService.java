@@ -38,7 +38,6 @@ import java.util.UUID;
 public class SchemaUmgebungService {
 
     private static final String POSTGRES_UNIQUE_VIOLATION = "23505";
-    private static final String NAME_UNIQUE_CONSTRAINT = "schema_umgebung_name_unique";
 
     private static final String SELECT_COLUMNS = "id, name, system, beschreibung, aktiv, created_at, updated_at";
 

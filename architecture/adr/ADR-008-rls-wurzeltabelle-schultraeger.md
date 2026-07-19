@@ -60,8 +60,10 @@ Zeilen mit `tenant_id IS NULL` enthält (z. B. `SCHULTRAEGER_LIST`). Eine Tenant
 Regel 1 wäre damit für `audit_admin` semantisch falsch.
 
 **Entscheidung:** `audit_admin` ist von Prüfregel 1 ausgenommen. Die Regel gilt nur für
-mandantenbezogene Fachtabellen (in diesem Auftrag: `schule`, `svws_instanz`, `schema`).
-Die Isolation von `audit_admin` erfolgt stattdessen ausschließlich über Tabellenrechte
+mandantenbezogene Fachtabellen. Im aktuellen Modell sind das insbesondere `schule` und `schema`;
+`svws_instanz` folgt seit ADR-011 nicht mehr dem Tenant-Tabellen-Muster, sondern ist eine
+mandantenübergreifende Betriebsressource ohne `tenant_id` mit eigenem RLS-Policy-Muster. Die
+Isolation von `audit_admin` erfolgt stattdessen ausschließlich über Tabellenrechte
 (`INSERT`/`SELECT` für Anwendungsrollen, kein `UPDATE`/`DELETE` – Append-only, ADR-009). Der
 RLS-Wächter-Test bildet die Ausnahme explizit und benannt ab (kein stiller Ausschluss): Er
 schließt `audit_admin` namentlich von Prüfregel 1 aus und verifiziert zusätzlich, dass die

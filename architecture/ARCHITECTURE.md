@@ -187,11 +187,16 @@ erDiagram
         uuid schule_id FK
         uuid instanz_id FK
         string schema_name
-        string umgebung "PRODUKTIV | TEST"
+        string umgebung "frei, z. B. PRODUKTIV, TEST, SCHULUNG"
+        string status "GEPLANT | VORHANDEN | AKTIV | ..."
+        boolean aktiv
+        string source "MANUELL | SYNCHRONISIERT"
     }
 ```
 
 **`SVWS_INSTANZ` ist bewusst keine Mandanten-Wurzel und kein Mandanten-Kind** ([ADR-011](./adr/ADR-011-svws-instanz-als-geteilte-betriebsressource.md)): Eine SVWS-Instanz ist eine technische Betriebsressource des Dienstleisters ohne `tenant_id` und ohne Bindung an genau einen Schulträger; mehrere Schulträger können dieselbe Instanz über ihre jeweiligen Schemas mitnutzen. Die Mandantenzuordnung entsteht ausschließlich über `SCHEMA` (`tenant_id`, `schule_id`, `instanz_id`), nicht über eine Beziehung `SCHULTRAEGER → SVWS_INSTANZ`.
+
+**`SCHEMA` bleibt tenant-gebunden** ([ADR-012](./adr/ADR-012-schemaverwaltung-und-schuldatenbanken.md)): `umgebung` ist bewusst freier Text statt eines geschlossenen Enums (erweiterbar über die Startwerte PRODUKTIV/TEST/SCHULUNG hinaus), nur `PRODUKTIV` bleibt fachlich ausgezeichnet (Namenskonvention ohne Suffix, höchstens ein aktives Produktiv-Schema je Schule). `status` ist der davon getrennte technische Lebenszyklus.
 
 ---
 
@@ -316,7 +321,7 @@ Alle Entscheidungen als ADRs unter [`architecture/adr/`](./adr/README.md).
 |---------|-----------|
 | Dienstleister | Betreiber von SVWS-Servern für mehrere Schulträger im RZ. |
 | Schulträger | Mandant; Kommune o. ä. mit mehreren Schulen. |
-| Schema | MariaDB-Datenbankschema einer Schule (Produktiv oder Test) auf einer SVWS-Instanz. |
+| Schema (Schuldatenbank) | MariaDB-Datenbankschema einer Schule für eine Umgebung (z. B. Produktiv, Test, Schulung) auf einer SVWS-Instanz ([ADR-012](./adr/ADR-012-schemaverwaltung-und-schuldatenbanken.md)). |
 | SVWS-Instanz | Ein laufender SVWS-Server-Prozess mit zugehöriger MariaDB; mandantenübergreifende Betriebsressource, keine 1:1-/1:n-Bindung an einen Schulträger – mehrere Schulträger können dieselbe Instanz über ihre Schemas mitnutzen ([ADR-011](./adr/ADR-011-svws-instanz-als-geteilte-betriebsressource.md)). |
 | Control Plane | EduGate-Teil für Verwaltung (Mandanten, Instanzen, Schemas). |
 | Data Plane / Gateway | EduGate-Teil für den Durchgriff von API-Clients auf Schuldaten. |

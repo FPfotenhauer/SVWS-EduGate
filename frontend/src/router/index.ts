@@ -21,6 +21,12 @@ const router = createRouter({
       props: true,
     },
     {
+      path: '/schultraeger/:schultraegerId/schulen/:schuleId',
+      name: 'schule-detail',
+      component: () => import('@/views/SchuleDetailView.vue'),
+      props: true,
+    },
+    {
       path: '/svws-instanzen',
       name: 'svws-instanz-liste',
       component: () => import('@/views/SvwsInstanzListView.vue'),

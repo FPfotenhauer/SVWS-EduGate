@@ -14,10 +14,13 @@ export const useAuthStore = defineStore('auth', () => {
   const displayName = computed(
     () => (user.value?.profile.preferred_username as string | undefined) ?? user.value?.profile.sub ?? null,
   )
-  const roles = computed<string[]>(() => {
-    const realmAccess = user.value?.profile.realm_access as { roles?: string[] } | undefined
-    return realmAccess?.roles ?? []
-  })
+  // Rollen stehen laut Realm-Konfiguration (docker/keycloak/realm-edugate.json, Mapper
+  // "realm roles") nur im Access-Token (access.token.claim), nicht im ID-Token - oidc-client-ts
+  // befüllt `user.profile` aber aus dem ID-Token. Ein Blick in `profile.realm_access` liefert
+  // daher immer eine leere Liste; die Rollen müssen aus dem Access-Token-JWT selbst gelesen
+  // werden (nur zur UI-Anzeige, keine Signaturprüfung - die eigentliche Durchsetzung bleibt beim
+  // Backend, das den Access-Token ohnehin gegen Keycloaks Public Key validiert).
+  const roles = computed<string[]>(() => decodeRealmRolesFromAccessToken(user.value?.access_token))
 
   async function login(): Promise<void> {
     await userManager.signinRedirect()
@@ -38,3 +41,22 @@ export const useAuthStore = defineStore('auth', () => {
 
   return { user, isAuthenticated, accessToken, displayName, roles, login, logout, completeLogin, restore }
 })
+
+/**
+ * Liest `realm_access.roles` aus dem (unverifizierten) Payload eines JWT-Access-Tokens. Nur für
+ * die UI-Anzeige (z. B. Sichtbarkeit des Zahnrad-Icons) - keine Sicherheitsentscheidung, die
+ * bleibt beim Backend.
+ */
+function decodeRealmRolesFromAccessToken(accessToken: string | undefined): string[] {
+  const payload = accessToken?.split('.')[1]
+  if (!payload) {
+    return []
+  }
+  try {
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const claims = JSON.parse(atob(base64)) as { realm_access?: { roles?: string[] } }
+    return claims.realm_access?.roles ?? []
+  } catch {
+    return []
+  }
+}

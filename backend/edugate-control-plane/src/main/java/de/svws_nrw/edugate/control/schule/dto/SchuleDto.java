@@ -1,10 +1,10 @@
-package de.svws_nrw.edugate.core.domain;
+package de.svws_nrw.edugate.control.schule.dto;
 
 import java.time.Instant;
 import java.util.UUID;
 
-/** Eine Schule eines Schulträgers (Mandant: {@code schultraegerId}). */
-public record Schule(
+/** API-Antwortformat für eine Schule eines Schulträgers. */
+public record SchuleDto(
     UUID id,
     UUID schultraegerId,
     String schulnummer,

@@ -10,6 +10,7 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeAll;
@@ -32,6 +33,7 @@ class CrossTenantNegativeTest {
     private static UUID tenantA;
     private static UUID tenantB;
     private static UUID schuleUnterTenantB;
+    private static UUID schemaUnterTenantB;
 
     @Inject
     TenantContext tenantContext;
@@ -44,6 +46,7 @@ class CrossTenantNegativeTest {
         tenantA = UUID.randomUUID();
         tenantB = UUID.randomUUID();
         schuleUnterTenantB = UUID.randomUUID();
+        schemaUnterTenantB = UUID.randomUUID();
 
         try (Connection connection = PostgresTestResource.openAdminConnection()) {
             try (PreparedStatement schultraeger = connection.prepareStatement(
@@ -66,6 +69,29 @@ class CrossTenantNegativeTest {
                 schule.setString(3, "999999");
                 schule.setString(4, "Schule unter Tenant B");
                 schule.executeUpdate();
+            }
+
+            final UUID instanz;
+            try (PreparedStatement svwsInstanz = connection.prepareStatement(
+                    "INSERT INTO svws_instanz (name, base_url) VALUES (?, ?) RETURNING id")) {
+                svwsInstanz.setString(1, "Cross-Tenant-Test-Instanz-" + UUID.randomUUID());
+                svwsInstanz.setString(2, "https://svws-crosstenant-" + UUID.randomUUID() + ".example.org");
+                try (ResultSet resultSet = svwsInstanz.executeQuery()) {
+                    resultSet.next();
+                    instanz = (UUID) resultSet.getObject("id");
+                }
+            }
+
+            try (PreparedStatement schema = connection.prepareStatement(
+                    "INSERT INTO schema (id, tenant_id, schule_id, instanz_id, schema_name, umgebung) "
+                        + "VALUES (?, ?, ?, ?, ?, ?)")) {
+                schema.setObject(1, schemaUnterTenantB);
+                schema.setObject(2, tenantB);
+                schema.setObject(3, schuleUnterTenantB);
+                schema.setObject(4, instanz);
+                schema.setString(5, "999999");
+                schema.setString(6, "PRODUKTIV");
+                schema.executeUpdate();
             }
         }
     }
@@ -107,5 +133,31 @@ class CrossTenantNegativeTest {
             .getResultList();
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    @TestTransaction
+    void crossTenantSelectAufSchemaLiefertKeineZeilen() {
+        tenantContext.setTenant(tenantA);
+
+        final List<?> result = entityManager
+            .createNativeQuery("SELECT id FROM schema WHERE tenant_id = :tenantId")
+            .setParameter("tenantId", tenantB)
+            .getResultList();
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @TestTransaction
+    void tenantBSiehtWeiterhinDasEigeneSchema() {
+        tenantContext.setTenant(tenantB);
+
+        final List<?> result = entityManager
+            .createNativeQuery("SELECT id FROM schema WHERE id = :id")
+            .setParameter("id", schemaUnterTenantB)
+            .getResultList();
+
+        assertThat(result).hasSize(1);
     }
 }

@@ -21,6 +21,17 @@ const router = createRouter({
       props: true,
     },
     {
+      path: '/schultraeger/:schultraegerId/schulen/:schuleId',
+      name: 'schule-detail',
+      component: () => import('@/views/SchuleDetailView.vue'),
+      props: true,
+    },
+    {
+      path: '/schuldatenbanken',
+      name: 'schuldatenbank-uebersicht',
+      component: () => import('@/views/SchuldatenbankUebersichtView.vue'),
+    },
+    {
       path: '/svws-instanzen',
       name: 'svws-instanz-liste',
       component: () => import('@/views/SvwsInstanzListView.vue'),
@@ -35,6 +46,18 @@ const router = createRouter({
       name: 'svws-instanz-bearbeiten',
       component: () => import('@/views/SvwsInstanzFormView.vue'),
       props: true,
+    },
+    {
+      path: '/einstellungen',
+      name: 'einstellungen',
+      component: () => import('@/views/EinstellungenView.vue'),
+      meta: { requiresAdmin: true },
+    },
+    {
+      path: '/einstellungen/umgebungen',
+      name: 'schema-umgebungen',
+      component: () => import('@/views/SchemaUmgebungenView.vue'),
+      meta: { requiresAdmin: true },
     },
     {
       path: '/auth/callback',
@@ -60,6 +83,14 @@ router.beforeEach(async (to) => {
   if (!authStore.isAuthenticated) {
     await authStore.login()
     return false
+  }
+
+  // Frontend-seitige UX-Absicherung für die Betreiber-Einstellungen (Zahnrad-Bereich): Die
+  // eigentliche Durchsetzung bleibt wie überall der Backend-Endpunkt (@RolesAllowed
+  // "dienstleister-admin"). Aktuell gibt es nur diese eine Rolle, ein Redirect verhindert aber
+  // zumindest eine verwirrende 403-Seite für Nutzer ohne die Rolle.
+  if (to.meta.requiresAdmin && !authStore.roles.includes('dienstleister-admin')) {
+    return { name: 'schultraeger-liste' }
   }
 
   return true

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Modal from '@/components/Modal.vue'
 import { useAnsprechpartnerStore } from '@/stores/ansprechpartnerStore'
+import { useSchuleStore } from '@/stores/schuleStore'
 import { useSchultraegerStore } from '@/stores/schultraegerStore'
 import { ApiError } from '@/types/problem'
 import type { Ansprechpartner } from '@/types/ansprechpartner'
@@ -14,6 +15,7 @@ const props = defineProps<{ id?: string }>()
 const router = useRouter()
 const store = useSchultraegerStore()
 const ansprechpartnerStore = useAnsprechpartnerStore()
+const schuleStore = useSchuleStore()
 
 const geladenerSchultraeger = ref<Schultraeger | null>(null)
 
@@ -35,6 +37,7 @@ onMounted(async () => {
   if (props.id) {
     geladenerSchultraeger.value = await store.get(props.id)
     await ansprechpartnerStore.fetchList(props.id)
+    await schuleStore.fetchList(props.id)
   }
 })
 
@@ -183,23 +186,36 @@ async function bestaetigenAnsprechpartnerLoeschen(): Promise<void> {
   }
   zuLoeschenderAnsprechpartner.value = null
 }
+
+// Schulen sind seit ADR-013 kein primär hier verstecktes CRUD mehr: Diese Ansicht zeigt nur noch
+// eine kompakte, lesende Liste mit Querverweisen in die Schuldatenbank-Übersicht bzw. die
+// Schule-Detailseite (dort auch Anlegen/Bearbeiten). Betreiber-Hauptsicht ist "Schuldatenbanken".
 </script>
 
 <template>
   <main>
-    <h1>{{ bearbeitenModus ? 'Schulträger bearbeiten' : 'Neuen Schulträger anlegen' }}</h1>
+    <h1 v-if="!bearbeitenModus">Neuen Schulträger anlegen</h1>
 
     <template v-if="bearbeitenModus">
       <p v-if="fehler && !bearbeitenModalOffen" role="alert" class="fehler">{{ fehler }}</p>
 
+      <header class="toolbar">
+        <h1>{{ geladenerSchultraeger?.name ?? 'Schulträger' }}</h1>
+        <button type="button" class="button-secondary btn-klein" @click="bearbeitenOeffnen">Bearbeiten</button>
+      </header>
+
       <dl v-if="geladenerSchultraeger" class="detail-grid">
-        <div class="detail-eintrag">
-          <dt>Name</dt>
-          <dd>{{ geladenerSchultraeger.name }}</dd>
-        </div>
         <div class="detail-eintrag">
           <dt>Trägernummer</dt>
           <dd>{{ geladenerSchultraeger.traegernummer }}</dd>
+        </div>
+        <div class="detail-eintrag">
+          <dt>Status</dt>
+          <dd>
+            <span :class="['status', geladenerSchultraeger.aktiv ? 'status-aktiv' : 'status-inaktiv']">
+              {{ geladenerSchultraeger.aktiv ? 'Aktiv' : 'Deaktiviert' }}
+            </span>
+          </dd>
         </div>
         <div class="detail-eintrag">
           <dt>Straße</dt>
@@ -219,9 +235,19 @@ async function bestaetigenAnsprechpartnerLoeschen(): Promise<void> {
         </div>
       </dl>
 
-      <div class="aktionen">
-        <button type="button" class="button-primary" @click="bearbeitenOeffnen">Bearbeiten</button>
-      </div>
+      <section v-if="geladenerSchultraeger?.aktiv" class="operationen">
+        <h2>Operationen</h2>
+        <div class="operationen-grid">
+          <article class="operation-karte gefahr">
+            <h3>Schulträger deaktivieren</h3>
+            <p>
+              Ein deaktivierter Schulträger bleibt erhalten, ist aber nicht mehr aktiv nutzbar. Diese Aktion kann über
+              die Oberfläche aktuell nicht rückgängig gemacht werden.
+            </p>
+            <button type="button" class="danger" @click="zuDeaktivierenBestaetigen = true">Deaktivieren</button>
+          </article>
+        </div>
+      </section>
     </template>
 
     <form v-else @submit.prevent="absenden">
@@ -327,13 +353,51 @@ async function bestaetigenAnsprechpartnerLoeschen(): Promise<void> {
       </div>
     </section>
 
-    <section v-if="bearbeitenModus && geladenerSchultraeger?.aktiv" class="gefahrenzone">
-      <h2>Schulträger deaktivieren</h2>
-      <p class="hinweis">
-        Ein deaktivierter Schulträger bleibt erhalten, ist aber nicht mehr aktiv nutzbar. Diese Aktion kann über die
-        Oberfläche aktuell nicht rückgängig gemacht werden.
+    <section v-if="bearbeitenModus" class="schulen">
+      <h2>Schulen</h2>
+
+      <p v-if="schuleStore.errorMessage" role="alert" class="fehler">
+        {{ schuleStore.errorMessage }}
       </p>
-      <button type="button" class="danger" @click="zuDeaktivierenBestaetigen = true">Deaktivieren</button>
+      <p v-else-if="schuleStore.loading">Lädt …</p>
+
+      <div v-else class="table-wrap">
+        <table>
+          <caption class="sr-only">
+            Liste der Schulen
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Schulnummer</th>
+              <th scope="col">Name</th>
+              <th scope="col">Status</th>
+              <th scope="col">Aktionen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="schule in schuleStore.items" :key="schule.id">
+              <td>{{ schule.schulnummer }}</td>
+              <td>{{ schule.name }}</td>
+              <td>
+                <span :class="['status', schule.aktiv ? 'status-aktiv' : 'status-inaktiv']">
+                  {{ schule.aktiv ? 'Aktiv' : 'Deaktiviert' }}
+                </span>
+              </td>
+              <td class="aktionen-zelle">
+                <RouterLink
+                  :to="{ name: 'schule-detail', params: { schultraegerId: props.id, schuleId: schule.id } }"
+                  class="button-secondary btn-klein"
+                >
+                  Zur Schule
+                </RouterLink>
+              </td>
+            </tr>
+            <tr v-if="schuleStore.items.length === 0">
+              <td colspan="4">Keine Schulen erfasst.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <Modal :open="bearbeitenModalOffen" titel="Schulträger bearbeiten" @close="bearbeitenSchliessen">
@@ -521,13 +585,59 @@ main {
   margin: 0;
 }
 
-.ansprechpartner {
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.operationen,
+.ansprechpartner,
+.schulen {
   margin-top: 2.5rem;
   padding-top: 1.5rem;
   border-top: 1px solid var(--line);
 }
 
-.ansprechpartner .aktionen {
+.operationen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.operation-karte {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.operation-karte h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.operation-karte p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  flex-grow: 1;
+}
+
+.operation-karte.gefahr {
+  border-color: var(--error);
+}
+
+.ansprechpartner .aktionen,
+.schulen .aktionen {
   margin-top: 1rem;
 }
 
@@ -615,15 +725,26 @@ tbody tr:hover {
   font-size: 0.85em;
 }
 
-.gefahrenzone {
-  margin-top: 2.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--line);
+.status {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-aktiv {
+  color: var(--accent);
+}
+
+.status-inaktiv {
+  color: var(--ink-soft);
 }
 
 .hinweis {
   color: var(--ink-soft);
   max-width: 36rem;
+}
+
+.hinweis a {
+  color: var(--accent);
 }
 
 .fehler {

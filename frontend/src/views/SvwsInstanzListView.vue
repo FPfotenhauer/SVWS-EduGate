@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import SchemaFundZuordnungModal from '@/components/SchemaFundZuordnungModal.vue'
 import { useSvwsInstanzStore } from '@/stores/svwsInstanzStore'
 import { useSvwsSchemaFundStore } from '@/stores/svwsSchemaFundStore'
 import { ApiError } from '@/types/problem'
@@ -54,6 +55,23 @@ const zuordnungsStatusKlasse: Record<SchemaFundZuordnungsStatus, string> = {
   BEKANNT: 'status-aktiv',
   UNZUGEORDNET: 'status-degraded',
   KONFLIKT: 'status-unreachable',
+}
+
+// Zuordnungs-Modal (ADR-014 Schritt 2): Klick auf den "Unzugeordnet"-Status öffnet ein Modal im
+// bestehenden Instanz-Kontext statt einer eigenen Seite. schemaFundStore.assign() lädt die
+// Fund-Liste der Instanz nach Erfolg selbst neu, daher genügt hier nur das Schließen des Modals.
+const zuordnungModalOffen = ref(false)
+const zuordnungInstanz = ref<SvwsInstanz | null>(null)
+const zuordnungFund = ref<SvwsSchemaFund | null>(null)
+
+function zuordnungOeffnen(instanz: SvwsInstanz, fund: SvwsSchemaFund): void {
+  zuordnungInstanz.value = instanz
+  zuordnungFund.value = fund
+  zuordnungModalOffen.value = true
+}
+
+function zuordnungSchliessen(): void {
+  zuordnungModalOffen.value = false
 }
 
 // Verdichtet die vier Einzelflags der Privileged-API zu wenigen Auffälligkeits-Badges statt
@@ -375,7 +393,15 @@ function verbindungstestFarbe(instanz: SvwsInstanz): string {
                           </td>
                           <td>{{ formatiereZeitpunkt(fund.lastSeenAt) }}</td>
                           <td>
-                            <span :class="['status', zuordnungsStatusKlasse[fund.zuordnungsStatus]]">
+                            <button
+                              v-if="fund.zuordnungsStatus === 'UNZUGEORDNET'"
+                              type="button"
+                              :class="['status', 'status-link', zuordnungsStatusKlasse[fund.zuordnungsStatus]]"
+                              @click="zuordnungOeffnen(instanz, fund)"
+                            >
+                              {{ zuordnungsStatusLabel[fund.zuordnungsStatus] }}
+                            </button>
+                            <span v-else :class="['status', zuordnungsStatusKlasse[fund.zuordnungsStatus]]">
                               {{ zuordnungsStatusLabel[fund.zuordnungsStatus] }}
                             </span>
                             <RouterLink
@@ -411,6 +437,15 @@ function verbindungstestFarbe(instanz: SvwsInstanz): string {
         Weiter
       </button>
     </nav>
+
+    <SchemaFundZuordnungModal
+      :open="zuordnungModalOffen"
+      :instanz-id="zuordnungInstanz?.id ?? ''"
+      :instanz-name="zuordnungInstanz?.name ?? ''"
+      :fund="zuordnungFund"
+      @close="zuordnungSchliessen"
+      @zugeordnet="zuordnungSchliessen"
+    />
   </main>
 </template>
 
@@ -610,6 +645,21 @@ tbody tr:hover {
 .status {
   font-weight: 600;
   white-space: nowrap;
+}
+
+.status-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.status-link:hover,
+.status-link:focus-visible {
+  text-decoration-thickness: 2px;
 }
 
 .status-aktiv,

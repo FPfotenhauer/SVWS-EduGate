@@ -24,3 +24,28 @@ export interface SvwsSchemaSyncResult {
   gefundeneSchemata: number
   syncedAt: string
 }
+
+/** Schulstammdaten aus der SVWS-Privileged-API (ADR-014 Schritt 2) - rein informativ, niemals Grundlage einer automatischen Zuordnung. */
+export interface SvwsSchulInfo {
+  schulnummer: number | null
+  schulform: string | null
+  bezeichnung: string | null
+  strassenname: string | null
+  hausnummer: string | null
+  hausnummerZusatz: string | null
+  plz: string | null
+  ort: string | null
+}
+
+export interface SvwsSchulInfoResult {
+  success: boolean
+  message: string
+  schulInfo: SvwsSchulInfo | null
+}
+
+export interface SchemaFundZuordnungFormData {
+  schultraegerId: string
+  schuleId: string
+  umgebung: string
+  beschreibung?: string
+}

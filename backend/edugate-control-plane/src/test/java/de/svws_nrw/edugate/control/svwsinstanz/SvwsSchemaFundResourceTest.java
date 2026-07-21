@@ -9,19 +9,25 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import de.svws_nrw.edugate.control.support.PostgresTestResource;
+import de.svws_nrw.edugate.control.svwsinstanz.dto.SchemaFundZuordnungRequest;
 import de.svws_nrw.edugate.core.svws.SvwsPrivilegedApiClient;
 import de.svws_nrw.edugate.core.svws.SvwsSchemaListResult;
 import de.svws_nrw.edugate.core.svws.SvwsSchemaListeEintrag;
+import de.svws_nrw.edugate.core.svws.SvwsSchulInfo;
+import de.svws_nrw.edugate.core.svws.SvwsSchulInfoResult;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
+import jakarta.inject.Inject;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -40,6 +46,9 @@ class SvwsSchemaFundResourceTest {
 
     @InjectMock
     SvwsPrivilegedApiClient privilegedApiClient;
+
+    @Inject
+    SvwsSchemaFundService service;
 
     @Test
     void ohneTokenGibtEs401AlsProblemJson() {
@@ -212,6 +221,323 @@ class SvwsSchemaFundResourceTest {
 
         given().when().get(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde")
             .then().statusCode(200).body("", hasSize(2));
+    }
+
+    // --- Zuordnungs-Workflow (ADR-014 Schritt 2) ---------------------------------------------
+
+    @Test
+    @TestSecurity(user = "user-ohne-rolle", roles = {})
+    void zuordnungOhneRolleGibtEs403() {
+        given().contentType(ContentType.JSON).body("{}")
+            .when().post(SVWS_INSTANZ_PATH + "/" + UUID.randomUUID() + "/schema-funde/" + UUID.randomUUID() + "/zuordnung")
+            .then().statusCode(403).contentType("application/problem+json");
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void zuordnungLegtNeuesSchemaAnUndFundWirdAlsBekanntKlassifiziert() {
+        final String instanzId = instanzMitZugangsdatenAnlegen();
+        final String schemaName = "800910";
+        final String fundId = einzelnenFundAnlegen(instanzId, schemaName, false, false);
+        final String schultraegerId = neuenSchultraegerAnlegen();
+        final String schuleId = neueSchuleAnlegen(schultraegerId, schemaName, "Neue Schule");
+
+        given().contentType(ContentType.JSON)
+            .body(zuordnungBody(schultraegerId, schuleId, "PRODUKTIV", "Testzuordnung"))
+            .when().post(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde/" + fundId + "/zuordnung")
+            .then()
+            .statusCode(200)
+            .body("id", equalTo(fundId))
+            .body("zuordnungsStatus", equalTo("BEKANNT"))
+            .body("schuleId", equalTo(schuleId))
+            .body("schultraegerId", equalTo(schultraegerId))
+            .body("schemaId", org.hamcrest.Matchers.notNullValue());
+
+        given().when().get(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde")
+            .then().statusCode(200).body("[0].zuordnungsStatus", equalTo("BEKANNT"));
+
+        assertThat(auditOutcomesForAction("SVWS_SCHEMA_FUND_ZUORDNEN")).contains("SUCCESS");
+        assertThat(gespeichertesSchema(instanzId, schemaName))
+            .containsEntry("status", "VORHANDEN")
+            .containsEntry("source", "SYNCHRONISIERT")
+            .containsEntry("umgebung", "PRODUKTIV");
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void zuordnungSetztStatusAusFundFlagsAb() {
+        final String instanzId = instanzMitZugangsdatenAnlegen();
+        final String schemaName = "800911";
+        final String fundId = einzelnenFundAnlegen(instanzId, schemaName, true, false);
+        final String schultraegerId = neuenSchultraegerAnlegen();
+        final String schuleId = neueSchuleAnlegen(schultraegerId, schemaName, "Deaktivierte Schule");
+
+        given().contentType(ContentType.JSON)
+            .body(zuordnungBody(schultraegerId, schuleId, "TEST", null))
+            .when().post(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde/" + fundId + "/zuordnung")
+            .then().statusCode(200);
+
+        assertThat(gespeichertesSchema(instanzId, schemaName))
+            .containsEntry("status", "DEAKTIVIERT")
+            .containsEntry("aktiv", false);
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void zuordnungMitUnbekanntemSchultraegerErgibt404() {
+        final String instanzId = instanzMitZugangsdatenAnlegen();
+        final String fundId = einzelnenFundAnlegen(instanzId, "800912", false, false);
+
+        given().contentType(ContentType.JSON)
+            .body(zuordnungBody(UUID.randomUUID().toString(), UUID.randomUUID().toString(), "PRODUKTIV", null))
+            .when().post(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde/" + fundId + "/zuordnung")
+            .then().statusCode(404).contentType("application/problem+json");
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void zuordnungMitSchuleAusAnderemSchultraegerErgibt404() {
+        final String instanzId = instanzMitZugangsdatenAnlegen();
+        final String fundId = einzelnenFundAnlegen(instanzId, "800913", false, false);
+        final String schultraegerA = neuenSchultraegerAnlegen();
+        final String schultraegerB = neuenSchultraegerAnlegen();
+        final String schuleUnterB = neueSchuleAnlegen(schultraegerB, "800913", "Schule unter B");
+
+        given().contentType(ContentType.JSON)
+            .body(zuordnungBody(schultraegerA, schuleUnterB, "PRODUKTIV", null))
+            .when().post(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde/" + fundId + "/zuordnung")
+            .then().statusCode(404).contentType("application/problem+json");
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void zuordnungFuerUnbekanntenFundErgibt404() {
+        final String instanzId = neueSvwsInstanzAnlegen();
+        final String schultraegerId = neuenSchultraegerAnlegen();
+        final String schuleId = neueSchuleAnlegen(schultraegerId, "800914", "Schule");
+
+        given().contentType(ContentType.JSON)
+            .body(zuordnungBody(schultraegerId, schuleId, "PRODUKTIV", null))
+            .when().post(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde/" + UUID.randomUUID() + "/zuordnung")
+            .then().statusCode(404).contentType("application/problem+json");
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void erneuteZuordnungAnDieselbeSchuleAktualisiertOhneFehler() {
+        final String instanzId = instanzMitZugangsdatenAnlegen();
+        final String schemaName = "800915";
+        final String fundId = einzelnenFundAnlegen(instanzId, schemaName, false, false);
+        final String schultraegerId = neuenSchultraegerAnlegen();
+        final String schuleId = neueSchuleAnlegen(schultraegerId, schemaName, "Schule");
+
+        given().contentType(ContentType.JSON)
+            .body(zuordnungBody(schultraegerId, schuleId, "TEST", "erste Beschreibung"))
+            .when().post(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde/" + fundId + "/zuordnung")
+            .then().statusCode(200);
+
+        given().contentType(ContentType.JSON)
+            .body(zuordnungBody(schultraegerId, schuleId, "SCHULUNG", "korrigierte Beschreibung"))
+            .when().post(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde/" + fundId + "/zuordnung")
+            .then().statusCode(200).body("zuordnungsStatus", equalTo("BEKANNT"));
+
+        assertThat(gespeichertesSchema(instanzId, schemaName))
+            .containsEntry("umgebung", "SCHULUNG")
+            .containsEntry("beschreibung", "korrigierte Beschreibung");
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void zuordnungAnAndereSchuleAlsBereitsZugeordnetErgibtKonflikt() {
+        final String instanzId = instanzMitZugangsdatenAnlegen();
+        final String schemaName = "800916";
+        final String fundId = einzelnenFundAnlegen(instanzId, schemaName, false, false);
+        final String schultraegerId = neuenSchultraegerAnlegen();
+        final String schuleA = neueSchuleAnlegen(schultraegerId, schemaName + "-a", "Schule A");
+        final String schuleB = neueSchuleAnlegen(schultraegerId, schemaName + "-b", "Schule B");
+
+        given().contentType(ContentType.JSON)
+            .body(zuordnungBody(schultraegerId, schuleA, "PRODUKTIV", null))
+            .when().post(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde/" + fundId + "/zuordnung")
+            .then().statusCode(200);
+
+        given().contentType(ContentType.JSON)
+            .body(zuordnungBody(schultraegerId, schuleB, "PRODUKTIV", null))
+            .when().post(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde/" + fundId + "/zuordnung")
+            .then().statusCode(409).contentType("application/problem+json");
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void zuordnungMitProduktivKonfliktErgibt409() {
+        final String instanzId = instanzMitZugangsdatenAnlegen();
+        final String schultraegerId = neuenSchultraegerAnlegen();
+        final String schuleId = neueSchuleAnlegen(schultraegerId, "800917", "Schule mit Produktiv");
+        neuesSchema(schultraegerId, schuleId, instanzId, "800917", "PRODUKTIV");
+
+        final String zweitesSchema = "800917_zweit";
+        final String fundId = einzelnenFundAnlegen(instanzId, zweitesSchema, false, false);
+
+        given().contentType(ContentType.JSON)
+            .body(zuordnungBody(schultraegerId, schuleId, "PRODUKTIV", null))
+            .when().post(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde/" + fundId + "/zuordnung")
+            .then().statusCode(409).contentType("application/problem+json");
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void assignBySchemaNameOrdnetFundUeberSchemanamenZu() {
+        final String instanzId = instanzMitZugangsdatenAnlegen();
+        final String schemaName = "800918";
+        einzelnenFundAnlegen(instanzId, schemaName, false, false);
+        final String schultraegerId = neuenSchultraegerAnlegen();
+        final String schuleId = neueSchuleAnlegen(schultraegerId, schemaName, "Über Schemaname zugeordnet");
+
+        final SchemaFundZuordnungRequest request = new SchemaFundZuordnungRequest(
+            UUID.fromString(schultraegerId), UUID.fromString(schuleId), "PRODUKTIV", null);
+        final var dto = service.assignBySchemaName(ADMIN_USER, UUID.fromString(instanzId), schemaName, request);
+
+        assertThat(dto.zuordnungsStatus()).isEqualTo(SchemaFundZuordnungsStatus.BEKANNT);
+        assertThat(dto.schuleId()).isEqualTo(UUID.fromString(schuleId));
+    }
+
+    // --- SchulInfo (ADR-014 Schritt 2, optional) ----------------------------------------------
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void schulInfoOhneZugangsdatenLiefertKontrolliertenFehlschlagOhne500() {
+        // Kein Sync über instanzMitZugangsdatenAnlegen(): der Sync selbst würde Zugangsdaten
+        // benötigen. Der Fund wird daher direkt eingefügt, um gezielt den "keine Zugangsdaten"-
+        // Zweig von schulInfo() zu testen, unabhängig vom Sync-Workflow.
+        final String instanzId = neueSvwsInstanzAnlegen();
+        final String fundId = fundDirektEinfuegen(instanzId, "800919");
+
+        given().when().get(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde/" + fundId + "/schulinfo")
+            .then()
+            .statusCode(200)
+            .body("success", equalTo(false))
+            .body("schulInfo", org.hamcrest.Matchers.nullValue());
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void schulInfoMitErfolgLiefertSchulstammdaten() {
+        final String instanzId = instanzMitZugangsdatenAnlegen();
+        final String fundId = einzelnenFundAnlegen(instanzId, "800920", false, false);
+        when(privilegedApiClient.getSchulInfo(any(), any(), any(), any())).thenReturn(SvwsSchulInfoResult.success(
+            new SvwsSchulInfo(800920L, "GY", "Städt. Gymnasium", "Musterweg", "1", null, "42287", "Düsseldorf")));
+
+        given().when().get(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde/" + fundId + "/schulinfo")
+            .then()
+            .statusCode(200)
+            .body("success", equalTo(true))
+            .body("schulInfo.schulnummer", equalTo(800920))
+            .body("schulInfo.bezeichnung", equalTo("Städt. Gymnasium"));
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void schulInfoMitFehlschlagDerPrivilegedApiBlockiertZuordnungNicht() {
+        final String instanzId = instanzMitZugangsdatenAnlegen();
+        final String schemaName = "800921";
+        final String fundId = einzelnenFundAnlegen(instanzId, schemaName, false, false);
+        when(privilegedApiClient.getSchulInfo(any(), any(), any(), any()))
+            .thenReturn(SvwsSchulInfoResult.failure("Keine Schul-Informationen im Schema gefunden."));
+
+        given().when().get(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde/" + fundId + "/schulinfo")
+            .then().statusCode(200).body("success", equalTo(false));
+
+        final String schultraegerId = neuenSchultraegerAnlegen();
+        final String schuleId = neueSchuleAnlegen(schultraegerId, schemaName, "Manuell trotz SchulInfo-Fehlschlag");
+        given().contentType(ContentType.JSON)
+            .body(zuordnungBody(schultraegerId, schuleId, "PRODUKTIV", null))
+            .when().post(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde/" + fundId + "/zuordnung")
+            .then().statusCode(200).body("zuordnungsStatus", equalTo("BEKANNT"));
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void schulInfoFuerUnbekanntenFundErgibt404() {
+        final String instanzId = neueSvwsInstanzAnlegen();
+
+        given().when().get(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde/" + UUID.randomUUID() + "/schulinfo")
+            .then().statusCode(404).contentType("application/problem+json");
+    }
+
+    private String einzelnenFundAnlegen(final String instanzId, final String schemaName, final boolean isDeactivated,
+            final boolean isTainted) {
+        when(privilegedApiClient.listSchemas(any(), any(), any())).thenReturn(SvwsSchemaListResult.success(List.of(
+            new SvwsSchemaListeEintrag(schemaName, schemaName, true, 5L, isTainted, true, isDeactivated))));
+        given().when().post(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-sync").then().statusCode(200);
+        return given().when().get(SVWS_INSTANZ_PATH + "/" + instanzId + "/schema-funde")
+            .then().statusCode(200).extract().path("find { it.schemaName == '" + schemaName + "' }.id");
+    }
+
+    /**
+     * Fügt einen Fund direkt per SQL ein, ohne den Sync-Workflow zu durchlaufen (der selbst
+     * Zugangsdaten bräuchte) - für Tests, die gezielt den "keine Zugangsdaten hinterlegt"-Zweig
+     * von {@code schulInfo()}/{@code sync()} prüfen wollen.
+     */
+    private String fundDirektEinfuegen(final String instanzId, final String schemaName) {
+        try (Connection connection = PostgresTestResource.openAdminConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                 "INSERT INTO svws_schema_fund (instanz_id, schema_name, username, is_svws, is_in_config, is_deactivated) "
+                     + "VALUES (?, ?, ?, true, true, false) RETURNING id")) {
+            statement.setObject(1, UUID.fromString(instanzId));
+            statement.setString(2, schemaName);
+            statement.setString(3, schemaName);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return resultSet.getObject("id").toString();
+            }
+        } catch (final Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private String zuordnungBody(final String schultraegerId, final String schuleId, final String umgebung,
+            final String beschreibung) {
+        final String beschreibungJson = beschreibung == null ? "null" : "\"" + beschreibung + "\"";
+        return "{\"schultraegerId\": \"" + schultraegerId + "\", \"schuleId\": \"" + schuleId + "\", "
+            + "\"umgebung\": \"" + umgebung + "\", \"beschreibung\": " + beschreibungJson + "}";
+    }
+
+    private Map<String, Object> gespeichertesSchema(final String instanzId, final String schemaName) {
+        try (Connection connection = PostgresTestResource.openAdminConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                 "SELECT status, aktiv, source, umgebung, beschreibung FROM schema WHERE instanz_id = ? AND schema_name = ?")) {
+            statement.setObject(1, UUID.fromString(instanzId));
+            statement.setString(2, schemaName);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).as("Schema wurde angelegt").isTrue();
+                final Map<String, Object> row = new HashMap<>();
+                row.put("status", resultSet.getString("status"));
+                row.put("aktiv", resultSet.getBoolean("aktiv"));
+                row.put("source", resultSet.getString("source"));
+                row.put("umgebung", resultSet.getString("umgebung"));
+                row.put("beschreibung", resultSet.getString("beschreibung"));
+                return row;
+            }
+        } catch (final Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private List<String> auditOutcomesForAction(final String action) {
+        try (Connection connection = PostgresTestResource.openAdminConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                 "SELECT outcome FROM audit_admin WHERE action = ?")) {
+            statement.setString(1, action);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                final List<String> outcomes = new ArrayList<>();
+                while (resultSet.next()) {
+                    outcomes.add(resultSet.getString("outcome"));
+                }
+                return outcomes;
+            }
+        } catch (final Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private String instanzMitZugangsdatenAnlegen() {

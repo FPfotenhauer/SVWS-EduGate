@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSvwsSchemaFundStore } from './svwsSchemaFundStore'
 import * as svwsSchemaFundApi from '@/api/svwsSchemaFundApi'
 import { ApiError } from '@/types/problem'
-import type { SvwsSchemaFund, SvwsSchemaSyncResult } from '@/types/svwsSchemaFund'
+import type {
+  SchemaFundZuordnungFormData,
+  SvwsSchemaFund,
+  SvwsSchemaSyncResult,
+  SvwsSchulInfoResult,
+} from '@/types/svwsSchemaFund'
 
 vi.mock('@/auth/authStore', () => ({
   useAuthStore: () => ({ accessToken: 'test-token' }),
@@ -116,5 +121,96 @@ describe('svwsSchemaFundStore', () => {
 
     expect(store.itemsByInstanz[instanzId]).toEqual([beispielFund])
     expect(store.itemsByInstanz[andereInstanzId]).toEqual([])
+  })
+
+  it('assign ruft die API mit den Formulardaten auf und lädt die Funde der Instanz neu', async () => {
+    const zugeordneterFund: SvwsSchemaFund = { ...beispielFund, zuordnungsStatus: 'BEKANNT', schuleId: 'schule-1' }
+    const formData: SchemaFundZuordnungFormData = {
+      schultraegerId: 'traeger-1',
+      schuleId: 'schule-1',
+      umgebung: 'PRODUKTIV',
+      beschreibung: 'Testzuordnung',
+    }
+    const assignSpy = vi.spyOn(svwsSchemaFundApi, 'assignSchemaFund').mockResolvedValue(zugeordneterFund)
+    const listSpy = vi.spyOn(svwsSchemaFundApi, 'listSvwsInstanzSchemaFunde').mockResolvedValue([zugeordneterFund])
+
+    const store = useSvwsSchemaFundStore()
+    const result = await store.assign(instanzId, beispielFund.id, formData)
+
+    expect(assignSpy).toHaveBeenCalledWith(instanzId, beispielFund.id, formData, expect.any(Function))
+    expect(listSpy).toHaveBeenCalledWith(instanzId, expect.any(Function))
+    expect(result).toEqual(zugeordneterFund)
+    expect(store.itemsByInstanz[instanzId]).toEqual([zugeordneterFund])
+    expect(store.assigningByFund[beispielFund.id]).toBe(false)
+    expect(store.assignErrorByFund[beispielFund.id]).toBeNull()
+  })
+
+  it('assign wirft den Fehler weiter, setzt assignErrorByFund und lädt die Funde nicht neu', async () => {
+    vi.spyOn(svwsSchemaFundApi, 'assignSchemaFund').mockRejectedValue(
+      new ApiError(409, {
+        type: 'urn:problem-type:conflict',
+        title: 'Konflikt',
+        status: 409,
+        detail: 'bereits zugeordnet',
+        instance: null,
+      }),
+    )
+    const listSpy = vi.spyOn(svwsSchemaFundApi, 'listSvwsInstanzSchemaFunde')
+
+    const store = useSvwsSchemaFundStore()
+    await expect(
+      store.assign(instanzId, beispielFund.id, {
+        schultraegerId: 'traeger-1',
+        schuleId: 'schule-1',
+        umgebung: 'PRODUKTIV',
+      }),
+    ).rejects.toBeInstanceOf(ApiError)
+
+    expect(store.assignErrorByFund[beispielFund.id]).toContain('bereits zugeordnet')
+    expect(store.assigningByFund[beispielFund.id]).toBe(false)
+    expect(listSpy).not.toHaveBeenCalled()
+  })
+
+  it('fetchSchulInfo befüllt schulInfoByFund bei Erfolg', async () => {
+    const schulInfoResult: SvwsSchulInfoResult = {
+      success: true,
+      message: 'Schul-Informationen erfolgreich abgerufen.',
+      schulInfo: {
+        schulnummer: 123456,
+        schulform: 'GY',
+        bezeichnung: 'Städt. Gymnasium',
+        strassenname: 'Musterweg',
+        hausnummer: '1',
+        hausnummerZusatz: null,
+        plz: '42287',
+        ort: 'Düsseldorf',
+      },
+    }
+    vi.spyOn(svwsSchemaFundApi, 'getSchemaFundSchulInfo').mockResolvedValue(schulInfoResult)
+
+    const store = useSvwsSchemaFundStore()
+    await store.fetchSchulInfo(instanzId, beispielFund.id)
+
+    expect(store.schulInfoByFund[beispielFund.id]).toEqual(schulInfoResult)
+    expect(store.schulInfoLoadingByFund[beispielFund.id]).toBe(false)
+  })
+
+  it('fetchSchulInfo speichert einen kontrollierten Fehlschlag, ohne zu werfen (ADR-014 Schritt 2)', async () => {
+    vi.spyOn(svwsSchemaFundApi, 'getSchemaFundSchulInfo').mockRejectedValue(
+      new ApiError(404, {
+        type: 'urn:problem-type:not-found',
+        title: 'Nicht gefunden',
+        status: 404,
+        detail: 'Fund weg',
+        instance: null,
+      }),
+    )
+
+    const store = useSvwsSchemaFundStore()
+    await expect(store.fetchSchulInfo(instanzId, beispielFund.id)).resolves.toBeUndefined()
+
+    expect(store.schulInfoByFund[beispielFund.id]?.success).toBe(false)
+    expect(store.schulInfoByFund[beispielFund.id]?.message).toContain('Fund weg')
+    expect(store.schulInfoByFund[beispielFund.id]?.schulInfo).toBeNull()
   })
 })

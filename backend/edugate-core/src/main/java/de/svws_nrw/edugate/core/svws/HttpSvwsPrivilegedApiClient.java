@@ -2,6 +2,7 @@ package de.svws_nrw.edugate.core.svws;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -26,13 +27,18 @@ import javax.net.ssl.SSLException;
  * {@link HttpSvwsConnectionTester}); zusätzlich benötigt dieser konkrete Endpunkt root-Rechte auf
  * der Datenbank und liefert sonst 403.
  *
+ * <p>{@link #getSchulInfo(String, String, String, String)} ruft
+ * {@code GET /api/schema/liste/info/{schema}/schule} auf (ADR-014 Schritt 2) - rein informativ,
+ * niemals Grundlage einer automatischen Zuordnung.
+ *
  * <p>Netzwerk-, Protokoll- und Parsingfehler werden nie als Exception nach außen gereicht,
- * sondern immer in ein sicheres {@link SvwsSchemaListResult#failure(String)} übersetzt - siehe
- * Klassenkommentar von {@link HttpSvwsConnectionTester} für die Begründung (ADR-006).
+ * sondern immer in ein sicheres {@code failure(...)}-Ergebnis übersetzt - siehe Klassenkommentar
+ * von {@link HttpSvwsConnectionTester} für die Begründung (ADR-006).
  */
 public final class HttpSvwsPrivilegedApiClient implements SvwsPrivilegedApiClient {
 
     private static final String SCHEMA_LISTE_SVWS_PATH = "/api/schema/liste/svws";
+    private static final String SCHUL_INFO_PATH_TEMPLATE = "/api/schema/liste/info/%s/schule";
 
     private final HttpClient httpClient;
     private final Duration requestTimeout;
@@ -97,7 +103,43 @@ public final class HttpSvwsPrivilegedApiClient implements SvwsPrivilegedApiClien
                 return SvwsSchemaListResult.failure("Zugangsdaten ungültig oder ohne privilegierten Zugriff.");
             }
             return SvwsSchemaListResult.failure("SVWS-Instanz antwortete mit Status " + status + ".");
-        });
+        }, SvwsSchemaListResult::failure);
+    }
+
+    @Override
+    public SvwsSchulInfoResult getSchulInfo(final String baseUrl, final String username, final String password,
+            final String schemaName) {
+        final URI uri;
+        final HttpRequest.Builder requestBuilder;
+        try {
+            final String encodedSchema = URLEncoder.encode(schemaName, StandardCharsets.UTF_8).replace("+", "%20");
+            uri = URI.create(stripTrailingSlash(baseUrl) + String.format(SCHUL_INFO_PATH_TEMPLATE, encodedSchema));
+            requestBuilder = HttpRequest.newBuilder(uri).header("Authorization", basicAuthHeader(username, password)).GET();
+        } catch (final IllegalArgumentException e) {
+            return SvwsSchulInfoResult.failure("Die Base-URL ist technisch ungültig.");
+        }
+
+        final String host = uri.getHost();
+        if (host == null || !targetGuard.isAllowed(host)) {
+            return SvwsSchulInfoResult.failure("Zielhost ist für diese Operation nicht zugelassen.");
+        }
+
+        return send(requestBuilder, response -> {
+            final int status = response.statusCode();
+            if (status == 200) {
+                return parseSchulInfo(response.body());
+            }
+            if (status == 400) {
+                return SvwsSchulInfoResult.failure("Das angegebene Schema ist kein SVWS-Schema.");
+            }
+            if (status == 401 || status == 403) {
+                return SvwsSchulInfoResult.failure("Zugangsdaten ungültig oder ohne privilegierten Zugriff.");
+            }
+            if (status == 404) {
+                return SvwsSchulInfoResult.failure("Keine Schul-Informationen im Schema gefunden.");
+            }
+            return SvwsSchulInfoResult.failure("SVWS-Instanz antwortete mit Status " + status + ".");
+        }, SvwsSchulInfoResult::failure);
     }
 
     private SvwsSchemaListResult parseEntries(final String body) {
@@ -118,6 +160,33 @@ public final class HttpSvwsPrivilegedApiClient implements SvwsPrivilegedApiClien
             entries.add(toEintrag(map));
         }
         return SvwsSchemaListResult.success(entries);
+    }
+
+    private SvwsSchulInfoResult parseSchulInfo(final String body) {
+        final Object parsed;
+        try {
+            parsed = MinimalJsonParser.parse(body);
+        } catch (final JsonParseException e) {
+            return SvwsSchulInfoResult.failure("Antwort der SVWS-Instanz konnte nicht gelesen werden.");
+        }
+        // SchuleInfo ist laut OpenAPI-Spezifikation ein nullable Objekt - ein 200er mit JSON-null
+        // bedeutet fachlich dasselbe wie 404 (keine Schul-Informationen im Schema).
+        if (parsed == null) {
+            return SvwsSchulInfoResult.failure("Keine Schul-Informationen im Schema gefunden.");
+        }
+        if (!(parsed instanceof Map<?, ?> map)) {
+            return SvwsSchulInfoResult.failure("Antwort der SVWS-Instanz hatte ein unerwartetes Format.");
+        }
+        final SvwsSchulInfo info = new SvwsSchulInfo(
+            longField(map, "schulNr"),
+            stringField(map, "schulform"),
+            stringField(map, "bezeichnung"),
+            stringField(map, "strassenname"),
+            stringField(map, "hausnummer"),
+            stringField(map, "hausnummerZusatz"),
+            stringField(map, "plz"),
+            stringField(map, "ort"));
+        return SvwsSchulInfoResult.success(info);
     }
 
     private SvwsSchemaListeEintrag toEintrag(final Map<?, ?> map) {
@@ -143,25 +212,32 @@ public final class HttpSvwsPrivilegedApiClient implements SvwsPrivilegedApiClien
 
     private Long longField(final Map<?, ?> map, final String key) {
         final Object value = map.get(key);
+        // MinimalJsonParser liefert ganzzahlige JSON-Zahlen (z. B. die Revision) verlustfrei als
+        // Long; Double bleibt als defensiver Fallback, falls die API doch einmal einen
+        // Nicht-Ganzzahlwert liefert.
+        if (value instanceof Long l) {
+            return l;
+        }
         return value instanceof Double d ? d.longValue() : null;
     }
 
-    private SvwsSchemaListResult send(
+    private <T> T send(
             final HttpRequest.Builder requestBuilder,
-            final Function<HttpResponse<String>, SvwsSchemaListResult> classify) {
+            final Function<HttpResponse<String>, T> classify,
+            final Function<String, T> failureOf) {
         final HttpRequest request = requestBuilder.timeout(requestTimeout).build();
         try {
             final HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             return classify.apply(response);
         } catch (final HttpTimeoutException e) {
-            return SvwsSchemaListResult.failure("Zeitüberschreitung beim Verbindungsaufbau.");
+            return failureOf.apply("Zeitüberschreitung beim Verbindungsaufbau.");
         } catch (final SSLException e) {
-            return SvwsSchemaListResult.failure("TLS-/Zertifikatsfehler bei der Verbindung.");
+            return failureOf.apply("TLS-/Zertifikatsfehler bei der Verbindung.");
         } catch (final IOException e) {
-            return SvwsSchemaListResult.failure("Verbindung zur SVWS-Instanz war nicht möglich (Netzwerkfehler).");
+            return failureOf.apply("Verbindung zur SVWS-Instanz war nicht möglich (Netzwerkfehler).");
         } catch (final InterruptedException e) {
             Thread.currentThread().interrupt();
-            return SvwsSchemaListResult.failure("Anfrage wurde unterbrochen.");
+            return failureOf.apply("Anfrage wurde unterbrochen.");
         }
     }
 

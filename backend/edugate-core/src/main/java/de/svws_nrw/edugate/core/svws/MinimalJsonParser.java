@@ -13,8 +13,9 @@ import java.util.Map;
  * <p>Unterstützt den vollen, aber bewusst einfachen JSON-Wertebaum ({@code object}, {@code array},
  * {@code string}, {@code number}, {@code boolean}, {@code null}) - ausreichend für die
  * Privileged-API-Antworten (z. B. {@code SchemaListeEintrag}-Arrays), ohne Anspruch auf
- * Vollständigkeit gegenüber einer allgemeinen JSON-Bibliothek. Zahlen werden immer als
- * {@link Double} geliefert; Objekte als {@link Map}, Arrays als {@link List}.
+ * Vollständigkeit gegenüber einer allgemeinen JSON-Bibliothek. Ganzzahlige Zahlen werden als
+ * {@link Long} geliefert (verlustfrei für {@code int64}-Felder wie eine Schema-Revision),
+ * nicht-ganzzahlige als {@link Double}; Objekte als {@link Map}, Arrays als {@link List}.
  */
 public final class MinimalJsonParser {
 
@@ -138,7 +139,11 @@ public final class MinimalJsonParser {
                         }
                         final String hex = input.substring(pos, pos + 4);
                         pos += 4;
-                        result.append((char) Integer.parseInt(hex, 16));
+                        try {
+                            result.append((char) Integer.parseInt(hex, 16));
+                        } catch (final NumberFormatException e) {
+                            throw new JsonParseException("Ungültiges Unicode-Escape in JSON-String.");
+                        }
                     }
                     default -> throw new JsonParseException("Ungültiges Escape-Zeichen im JSON-String.");
                 }
@@ -168,19 +173,38 @@ public final class MinimalJsonParser {
         throw new JsonParseException("Ungültiger JSON-Wert.");
     }
 
-    private Double parseNumber() {
+    /**
+     * Ganzzahlige JSON-Zahlen (kein {@code .}/{@code e}/{@code E}) werden als {@link Long}
+     * geliefert statt als {@link Double}: Ein {@code double} kann ab 2^53 nicht mehr jede
+     * {@code long}/{@code int64}-Zahl exakt darstellen (relevant für OpenAPI-{@code int64}-Felder
+     * wie die Schema-Revision der Privileged-API). Nicht-ganzzahlige Zahlen bleiben {@link Double}.
+     */
+    private Object parseNumber() {
         final int start = pos;
         if (peek() == '-') {
             pos++;
         }
+        boolean isIntegral = true;
         while (pos < input.length() && isNumberChar(input.charAt(pos))) {
+            final char c = input.charAt(pos);
+            if (c == '.' || c == 'e' || c == 'E') {
+                isIntegral = false;
+            }
             pos++;
         }
         if (pos == start || (pos == start + 1 && input.charAt(start) == '-')) {
             throw new JsonParseException("Ungültiger numerischer JSON-Wert.");
         }
+        final String token = input.substring(start, pos);
+        if (isIntegral) {
+            try {
+                return Long.parseLong(token);
+            } catch (final NumberFormatException e) {
+                // Ganzzahl außerhalb des long-Bereichs - fällt durch zu Double statt zu scheitern.
+            }
+        }
         try {
-            return Double.parseDouble(input.substring(start, pos));
+            return Double.parseDouble(token);
         } catch (final NumberFormatException e) {
             throw new JsonParseException("Ungültiger numerischer JSON-Wert.");
         }

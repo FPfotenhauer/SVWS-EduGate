@@ -192,6 +192,133 @@ class HttpSvwsPrivilegedApiClientTest {
         assertThat(result.success()).isTrue();
     }
 
+    @Test
+    void getSchulInfo_mit200_liefertGeparsteSchulInfo() throws IOException {
+        final String body = """
+            {"schulNr":123456,"schulform":"GY","bezeichnung":"Städt. Gymnasium",
+             "strassenname":"Musterweg","hausnummer":"47","hausnummerZusatz":"a","plz":"42287","ort":"Düsseldorf"}
+            """;
+        server = startServer(exchange -> respond(exchange, 200, body));
+
+        final SvwsSchulInfoResult result = client.getSchulInfo(baseUrl(server), "user", "pass", "123456");
+
+        assertThat(result.success()).isTrue();
+        assertThat(result.schulInfo()).isNotNull();
+        assertThat(result.schulInfo().schulnummer()).isEqualTo(123456L);
+        assertThat(result.schulInfo().schulform()).isEqualTo("GY");
+        assertThat(result.schulInfo().bezeichnung()).isEqualTo("Städt. Gymnasium");
+        assertThat(result.schulInfo().ort()).isEqualTo("Düsseldorf");
+    }
+
+    @Test
+    void getSchulInfo_sendetSchemanameAlsPfadsegmentUndBasicAuth() throws IOException {
+        final AtomicReference<String> gesehenerPfad = new AtomicReference<>();
+        server = startServer(exchange -> {
+            gesehenerPfad.set(exchange.getRequestURI().getPath());
+            respond(exchange, 200, "{\"schulform\":\"GY\",\"bezeichnung\":\"Test\"}");
+        });
+
+        client.getSchulInfo(baseUrl(server), "user", "pass", "123456");
+
+        assertThat(gesehenerPfad.get()).isEqualTo("/api/schema/liste/info/123456/schule");
+    }
+
+    @Test
+    void getSchulInfo_mit200UndJsonNull_liefertKeineSchulInformationenGefunden() throws IOException {
+        server = startServer(exchange -> respond(exchange, 200, "null"));
+
+        final SvwsSchulInfoResult result = client.getSchulInfo(baseUrl(server), "user", "pass", "123456");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.schulInfo()).isNull();
+    }
+
+    @Test
+    void getSchulInfo_mit400_liefertKeinSvwsSchemaMeldung() throws IOException {
+        server = startServer(exchange -> respond(exchange, 400, ""));
+
+        final SvwsSchulInfoResult result = client.getSchulInfo(baseUrl(server), "user", "pass", "123456");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).contains("kein SVWS-Schema");
+    }
+
+    @Test
+    void getSchulInfo_mit403_liefertSicherenFehlschlagOhneCredentialLeak() throws IOException {
+        server = startServer(exchange -> respond(exchange, 403, ""));
+
+        final SvwsSchulInfoResult result = client.getSchulInfo(baseUrl(server), "user", "geheimes-passwort", "123456");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).doesNotContain("geheimes-passwort");
+    }
+
+    @Test
+    void getSchulInfo_mit404_liefertKeineInformationenGefundenMeldung() throws IOException {
+        server = startServer(exchange -> respond(exchange, 404, ""));
+
+        final SvwsSchulInfoResult result = client.getSchulInfo(baseUrl(server), "user", "pass", "123456");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.schulInfo()).isNull();
+    }
+
+    @Test
+    void getSchulInfo_mit500_liefertFehlschlagMitStatuscode() throws IOException {
+        server = startServer(exchange -> respond(exchange, 500, ""));
+
+        final SvwsSchulInfoResult result = client.getSchulInfo(baseUrl(server), "user", "pass", "123456");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).contains("500");
+    }
+
+    @Test
+    void getSchulInfo_mitKaputtemJson_liefertSicherenFehlschlagOhneException() throws IOException {
+        server = startServer(exchange -> respond(exchange, 200, "{nicht valide"));
+
+        final SvwsSchulInfoResult result = client.getSchulInfo(baseUrl(server), "user", "pass", "123456");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.schulInfo()).isNull();
+    }
+
+    @Test
+    void getSchulInfo_mitZeitueberschreitung_liefertSicherenFehlschlagOhneException() throws IOException {
+        server = startServer(exchange -> {
+            try {
+                Thread.sleep(2000);
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            respond(exchange, 200, "{}");
+        });
+
+        final SvwsSchulInfoResult result = client.getSchulInfo(baseUrl(server), "user", "pass", "123456");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).contains("Zeitüberschreitung");
+    }
+
+    @Test
+    void getSchulInfo_mitBlockiertemZielnetz_liefertSicherenFehlschlagOhneVerbindungsversuch() throws IOException {
+        server = startServer(exchange -> respond(exchange, 200, "{}"));
+        final HttpSvwsPrivilegedApiClient guardedClient =
+            new HttpSvwsPrivilegedApiClient(SHORT_TIMEOUT, SHORT_TIMEOUT, null, SvwsTargetGuard.defaultDeny());
+
+        final SvwsSchulInfoResult result = guardedClient.getSchulInfo(baseUrl(server), "user", "pass", "123456");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).doesNotContain("127.0.0.1");
+    }
+
+    @Test
+    void getSchulInfo_mitTechnischUngueltigerBaseUrl_liefertSicherenFehlschlagOhneException() {
+        final SvwsSchulInfoResult result = client.getSchulInfo("keine-url", "user", "pass", "123456");
+
+        assertThat(result.success()).isFalse();
+    }
+
     private static HttpServer startServer(final HttpHandler handler) throws IOException {
         final HttpServer httpServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         httpServer.createContext("/", handler);

@@ -38,7 +38,17 @@ class MinimalJsonParserTest {
         final Map<?, ?> first = (Map<?, ?>) list.get(0);
         assertThat(first.get("name")).isEqualTo("123456");
         assertThat(first.get("isSVWS")).isEqualTo(Boolean.TRUE);
-        assertThat(first.get("revision")).isEqualTo(3.0);
+        assertThat(first.get("revision")).isEqualTo(3L);
+    }
+
+    @Test
+    void parst_ganzzahligeWerteAlsLongVerlustfrei() {
+        // 2^53 + 1 ist die kleinste positive Ganzzahl, die ein double nicht mehr exakt
+        // darstellen kann - relevant für OpenAPI-int64-Felder wie die Schema-Revision.
+        final long nichtAlsDoubleExaktDarstellbar = 9_007_199_254_740_993L;
+
+        assertThat(MinimalJsonParser.parse(String.valueOf(nichtAlsDoubleExaktDarstellbar)))
+            .isEqualTo(nichtAlsDoubleExaktDarstellbar);
     }
 
     @Test
@@ -72,5 +82,13 @@ class MinimalJsonParserTest {
     @Test
     void wirftBeiUnterminiertemString() {
         assertThatThrownBy(() -> MinimalJsonParser.parse("\"abc")).isInstanceOf(JsonParseException.class);
+    }
+
+    @Test
+    void wirftJsonParseExceptionStattRoherNumberFormatExceptionBeiKaputtemUnicodeEscape() {
+        // Ein Unicode-Escape braucht vier Hex-Ziffern - "zzzz" ist keine gültige Hex-Zahl und darf
+        // nicht als rohe NumberFormatException durchschlagen (Aufrufer fangen gezielt nur
+        // JsonParseException).
+        assertThatThrownBy(() -> MinimalJsonParser.parse("\"\\uzzzz\"")).isInstanceOf(JsonParseException.class);
     }
 }

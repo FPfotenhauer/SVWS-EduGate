@@ -1,5 +1,6 @@
 package de.svws_nrw.edugate.control.svwsinstanz;
 
+import de.svws_nrw.edugate.control.svwsinstanz.dto.SchemaFundZuordnungRequest;
 import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsInstanzCreateRequest;
 import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsInstanzCredentialsRequest;
 import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsInstanzDto;
@@ -7,6 +8,7 @@ import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsInstanzPageDto;
 import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsInstanzUpdateRequest;
 import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsSchemaFundDto;
 import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsSchemaSyncResultDto;
+import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsSchulInfoResultDto;
 import de.svws_nrw.edugate.core.domain.InstanzStatus;
 import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.annotation.security.RolesAllowed;
@@ -123,6 +125,31 @@ public class SvwsInstanzResource {
     @Path("/{id}/schema-funde")
     public List<SvwsSchemaFundDto> schemaFunde(@PathParam("id") final UUID id) {
         return schemaFundService.list(adminSubject(), id);
+    }
+
+    /**
+     * Ordnet einen unzugeordneten SVWS-Schema-Fund kontrolliert einer Schule zu (ADR-014
+     * Schritt 2): erzeugt oder aktualisiert den passenden EduGate-{@code schema}-Datensatz.
+     * Nach Erfolg klassifiziert {@link #schemaFunde(UUID)} den Fund als {@code BEKANNT}.
+     */
+    @POST
+    @Path("/{id}/schema-funde/{fundId}/zuordnung")
+    public SvwsSchemaFundDto schemaFundZuordnen(@PathParam("id") final UUID id, @PathParam("fundId") final UUID fundId,
+            @Valid final SchemaFundZuordnungRequest request) {
+        return schemaFundService.assign(adminSubject(), id, fundId, request);
+    }
+
+    /**
+     * Liefert optional die im SVWS-Schema hinterlegten Schulinformationen als Orientierung beim
+     * Zuordnen (ADR-014 Schritt 2). Liefert immer 200: Ein SVWS-seitiger Fehlschlag (keine Rechte,
+     * keine Informationen, Netzwerkfehler) ist fachlich normal und darf die manuelle Zuordnung
+     * nicht blockieren - {@link SvwsSchulInfoResultDto#success()} zeigt das Ergebnis an.
+     */
+    @GET
+    @Path("/{id}/schema-funde/{fundId}/schulinfo")
+    public SvwsSchulInfoResultDto schemaFundSchulInfo(@PathParam("id") final UUID id,
+            @PathParam("fundId") final UUID fundId) {
+        return schemaFundService.schulInfo(adminSubject(), id, fundId);
     }
 
     private String adminSubject() {

@@ -2,6 +2,7 @@ package de.svws_nrw.edugate.control.schule;
 
 import de.svws_nrw.edugate.control.operator.AuditAction;
 import de.svws_nrw.edugate.control.operator.AuditOutcome;
+import de.svws_nrw.edugate.control.operator.OperatorConflictException;
 import de.svws_nrw.edugate.control.operator.OperatorNotFoundException;
 import de.svws_nrw.edugate.control.schule.dto.SchuleCreateRequest;
 import de.svws_nrw.edugate.control.schule.dto.SchuleDto;
@@ -121,6 +122,61 @@ public class SchuleService {
                 }
             }
         });
+    }
+
+    /**
+     * Endgültiges (hartes) Löschen einer Schule, im Unterschied zu {@link #deactivate}. Blockiert,
+     * solange die Schule noch echte Schuldatenbanken auf einer SVWS-Instanz hat (Status ungleich
+     * GEPLANT) - diese müssen zuerst einzeln über {@code SchemaService#destroy} entfernt werden,
+     * damit vor jeder echten Löschung deutlich vor der Backup-Notwendigkeit gewarnt werden kann.
+     * Lediglich vorbereitete (noch nicht real angelegte) Schemata werden dabei automatisch mit
+     * entfernt.
+     */
+    public void delete(final String adminSubject, final UUID schultraegerId, final UUID id) {
+        tenantAccess.execute(schultraegerId, connection -> {
+            final List<String> echteSchemata = selectEchteSchemaNamen(connection, id, schultraegerId);
+            if (!echteSchemata.isEmpty()) {
+                throw new OperatorConflictException("Diese Schule hat noch echte Schuldatenbanken auf einer SVWS-Instanz ("
+                    + String.join(", ", echteSchemata)
+                    + "). Diese müssen zuerst über die jeweilige SVWS-Instanz gelöscht werden.");
+            }
+
+            try (PreparedStatement statement =
+                    connection.prepareStatement("DELETE FROM schema WHERE schule_id = ? AND tenant_id = ?")) {
+                statement.setObject(1, id);
+                statement.setObject(2, schultraegerId);
+                statement.executeUpdate();
+            }
+
+            final String sql = "DELETE FROM schule WHERE id = ? AND tenant_id = ?";
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setObject(1, id);
+                statement.setObject(2, schultraegerId);
+                if (statement.executeUpdate() == 0) {
+                    throw new OperatorNotFoundException("Schule '" + id + "' wurde nicht gefunden.");
+                }
+            }
+
+            writeAudit(connection, adminSubject, AuditAction.SCHULE_DELETE, id, schultraegerId);
+            return null;
+        });
+    }
+
+    private List<String> selectEchteSchemaNamen(final Connection connection, final UUID schuleId, final UUID tenantId)
+            throws SQLException {
+        final String sql = "SELECT schema_name FROM schema WHERE schule_id = ? AND tenant_id = ? "
+            + "AND status <> 'GEPLANT' ORDER BY schema_name";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, schuleId);
+            statement.setObject(2, tenantId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                final List<String> namen = new ArrayList<>();
+                while (resultSet.next()) {
+                    namen.add(resultSet.getString("schema_name"));
+                }
+                return namen;
+            }
+        }
     }
 
     private void writeAudit(final Connection connection, final String adminSubject, final AuditAction action,

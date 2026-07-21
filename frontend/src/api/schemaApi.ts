@@ -1,5 +1,11 @@
 import { apiRequest, type AccessTokenProvider } from './httpClient'
-import type { Schema, SchemaCreateFormData, SchemaNamingSuggestion, SchemaUpdateFormData } from '@/types/schema'
+import type {
+  Schema,
+  SchemaCreateFormData,
+  SchemaDestroyResult,
+  SchemaNamingSuggestion,
+  SchemaUpdateFormData,
+} from '@/types/schema'
 
 function basePath(schultraegerId: string, schuleId: string): string {
   return `/schultraeger/${schultraegerId}/schulen/${schuleId}/schemata`
@@ -43,6 +49,19 @@ export function deactivateSchema(
   getAccessToken: AccessTokenProvider,
 ): Promise<Schema> {
   return apiRequest<Schema>(`${basePath(schultraegerId, schuleId)}/${id}`, { method: 'DELETE', getAccessToken })
+}
+
+/** Löscht ein echtes Schema unwiderruflich über die SVWS-Privileged-API (ADR-014). */
+export function destroySchemaOnInstanz(
+  schultraegerId: string,
+  schuleId: string,
+  id: string,
+  getAccessToken: AccessTokenProvider,
+): Promise<SchemaDestroyResult> {
+  return apiRequest<SchemaDestroyResult>(`${basePath(schultraegerId, schuleId)}/${id}/loeschen-auf-instanz`, {
+    method: 'POST',
+    getAccessToken,
+  })
 }
 
 export function schemaNamingSuggestion(

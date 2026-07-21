@@ -319,6 +319,110 @@ class HttpSvwsPrivilegedApiClientTest {
         assertThat(result.success()).isFalse();
     }
 
+    @Test
+    void destroySchema_mit204_liefertErfolg() throws IOException {
+        server = startServer(exchange -> respond(exchange, 204, ""));
+
+        final SvwsSchemaDestroyResult result = client.destroySchema(baseUrl(server), "user", "pass", "123456");
+
+        assertThat(result.success()).isTrue();
+    }
+
+    @Test
+    void destroySchema_sendetPostAufSchemaPfadUndBasicAuth() throws IOException {
+        final AtomicReference<String> gesehenerPfad = new AtomicReference<>();
+        final AtomicReference<String> gesehenerMethod = new AtomicReference<>();
+        final AtomicReference<String> gesehenerAuthHeader = new AtomicReference<>();
+        server = startServer(exchange -> {
+            gesehenerPfad.set(exchange.getRequestURI().getPath());
+            gesehenerMethod.set(exchange.getRequestMethod());
+            gesehenerAuthHeader.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            respond(exchange, 204, "");
+        });
+
+        client.destroySchema(baseUrl(server), "svws-admin", "geheim", "123456");
+
+        assertThat(gesehenerPfad.get()).isEqualTo("/api/schema/root/destroy/123456");
+        assertThat(gesehenerMethod.get()).isEqualTo("POST");
+        assertThat(gesehenerAuthHeader.get()).startsWith("Basic ");
+    }
+
+    @Test
+    void destroySchema_mit403_liefertDarfNichtGeloeschtWerdenMeldungOhneCredentialLeak() throws IOException {
+        server = startServer(exchange -> respond(exchange, 403, ""));
+
+        final SvwsSchemaDestroyResult result = client.destroySchema(baseUrl(server), "user", "geheimes-passwort", "123456");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).contains("darf nicht gelöscht werden");
+        assertThat(result.message()).doesNotContain("geheimes-passwort");
+    }
+
+    @Test
+    void destroySchema_mit404_liefertNichtGefundenMeldung() throws IOException {
+        server = startServer(exchange -> respond(exchange, 404, ""));
+
+        final SvwsSchemaDestroyResult result = client.destroySchema(baseUrl(server), "user", "pass", "123456");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).contains("nicht gefunden");
+    }
+
+    @Test
+    void destroySchema_mit401_liefertSicherenFehlschlag() throws IOException {
+        server = startServer(exchange -> respond(exchange, 401, ""));
+
+        final SvwsSchemaDestroyResult result = client.destroySchema(baseUrl(server), "user", "pass", "123456");
+
+        assertThat(result.success()).isFalse();
+    }
+
+    @Test
+    void destroySchema_mit500_liefertFehlschlagMitStatuscode() throws IOException {
+        server = startServer(exchange -> respond(exchange, 500, ""));
+
+        final SvwsSchemaDestroyResult result = client.destroySchema(baseUrl(server), "user", "pass", "123456");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).contains("500");
+    }
+
+    @Test
+    void destroySchema_mitZeitueberschreitung_liefertSicherenFehlschlagOhneException() throws IOException {
+        server = startServer(exchange -> {
+            try {
+                Thread.sleep(2000);
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            respond(exchange, 204, "");
+        });
+
+        final SvwsSchemaDestroyResult result = client.destroySchema(baseUrl(server), "user", "pass", "123456");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).contains("Zeitüberschreitung");
+    }
+
+    @Test
+    void destroySchema_mitTechnischUngueltigerBaseUrl_liefertSicherenFehlschlagOhneException() {
+        final SvwsSchemaDestroyResult result = client.destroySchema("keine-url", "user", "pass", "123456");
+
+        assertThat(result.success()).isFalse();
+    }
+
+    @Test
+    void destroySchema_mitBlockiertemZielnetz_liefertSicherenFehlschlagOhneVerbindungsversuch() throws IOException {
+        server = startServer(exchange -> respond(exchange, 204, ""));
+        final HttpSvwsPrivilegedApiClient guardedClient =
+            new HttpSvwsPrivilegedApiClient(SHORT_TIMEOUT, SHORT_TIMEOUT, null, SvwsTargetGuard.defaultDeny());
+
+        final SvwsSchemaDestroyResult result = guardedClient.destroySchema(baseUrl(server), "user", "pass", "123456");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).doesNotContain("127.0.0.1");
+    }
+
     private static HttpServer startServer(final HttpHandler handler) throws IOException {
         final HttpServer httpServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         httpServer.createContext("/", handler);

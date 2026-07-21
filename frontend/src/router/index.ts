@@ -60,6 +60,12 @@ const router = createRouter({
       meta: { requiresAdmin: true },
     },
     {
+      path: '/einstellungen/schuldatei',
+      name: 'schuldatei',
+      component: () => import('@/views/SchuldateiView.vue'),
+      meta: { requiresAdmin: true },
+    },
+    {
       path: '/auth/callback',
       name: 'auth-callback',
       component: () => import('@/views/LoginCallbackView.vue'),

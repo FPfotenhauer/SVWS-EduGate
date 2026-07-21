@@ -27,9 +27,10 @@ import java.util.UUID;
 public class SchultraegerService {
 
     private static final String POSTGRES_UNIQUE_VIOLATION = "23505";
+    private static final String POSTGRES_FOREIGN_KEY_VIOLATION = "23503";
 
-    private static final String SELECT_COLUMNS =
-        "id, name, traegernummer, strasse, plz, ort, beschreibung, aktiv, created_at, updated_at";
+    private static final String SELECT_COLUMNS = "id, name, traegernummer, strasse, plz, ort, beschreibung, aktiv, "
+        + "katalog_id, quelle, sonderfall_hinweis, created_at, updated_at";
 
     @Inject
     OperatorAccess operatorAccess;
@@ -75,8 +76,14 @@ public class SchultraegerService {
 
     public SchultraegerDto create(final String adminSubject, final SchultraegerCreateRequest request) {
         return operatorAccess.execute(adminSubject, AuditAction.SCHULTRAEGER_CREATE, "schultraeger", connection -> {
-            final String sql = "INSERT INTO schultraeger (name, traegernummer, strasse, plz, ort, beschreibung) "
-                + "VALUES (?, ?, ?, ?, ?, ?) RETURNING " + SELECT_COLUMNS;
+            // Herkunft wird serverseitig entschieden, nicht dem Client überlassen (ADR-020
+            // "Schritt 2"): eine katalogId erzwingt LANDESLISTE, unabhängig vom sonderfall-Flag.
+            final String quelle = request.katalogId() != null ? "LANDESLISTE" : request.sonderfall() ? "SONDERFALL" : "MANUELL";
+            final String sonderfallHinweis = "SONDERFALL".equals(quelle) ? request.sonderfallHinweis() : null;
+
+            final String sql = "INSERT INTO schultraeger "
+                + "(name, traegernummer, strasse, plz, ort, beschreibung, katalog_id, quelle, sonderfall_hinweis) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING " + SELECT_COLUMNS;
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setString(1, request.name());
                 statement.setString(2, request.traegernummer());
@@ -84,15 +91,23 @@ public class SchultraegerService {
                 statement.setString(4, request.plz());
                 statement.setString(5, request.ort());
                 statement.setString(6, request.beschreibung());
+                statement.setObject(7, request.katalogId());
+                statement.setString(8, quelle);
+                statement.setString(9, sonderfallHinweis);
                 try (ResultSet resultSet = statement.executeQuery()) {
                     resultSet.next();
                     final SchultraegerDto dto = toDto(resultSet);
-                    return OperatorOutcome.of(dto, dto.id());
+                    final String detailsJson = "{\"quelle\":\"" + quelle + "\"}";
+                    return new OperatorOutcome<>(dto, dto.id(), dto.id(), detailsJson);
                 }
             } catch (final SQLException e) {
                 if (POSTGRES_UNIQUE_VIOLATION.equals(e.getSQLState())) {
                     throw new OperatorConflictException(
                         "Ein Schulträger mit der Trägernummer '" + request.traegernummer() + "' existiert bereits.");
+                }
+                if (POSTGRES_FOREIGN_KEY_VIOLATION.equals(e.getSQLState())) {
+                    throw new OperatorNotFoundException(
+                        "Der referenzierte Schuldatei-Katalogeintrag '" + request.katalogId() + "' wurde nicht gefunden.");
                 }
                 throw e;
             }
@@ -169,6 +184,57 @@ public class SchultraegerService {
         });
     }
 
+    /**
+     * Endgültiges (hartes) Löschen, im Unterschied zu {@link #deactivate}. Nur für Schulträger
+     * ohne Schulen und ohne Landeslisten-Bezug (quelle MANUELL/SONDERFALL): Landeslisten-Einträge
+     * bleiben aus Provenienzgründen immer geschützt, und Schulen (bzw. davon abhängige Schemata)
+     * müssen vorher verschoben, archiviert oder gelöscht werden.
+     */
+    public void delete(final String adminSubject, final UUID id) {
+        operatorAccess.execute(adminSubject, AuditAction.SCHULTRAEGER_DELETE, "schultraeger", connection -> {
+            final SchultraegerDto vorher = selectById(connection, id);
+
+            final long schulenCount = countSchulen(connection, id);
+            if (schulenCount > 0) {
+                throw new OperatorConflictException("Dieser Schulträger hat noch " + schulenCount
+                    + (schulenCount == 1 ? " Schule" : " Schulen")
+                    + ". Bitte zuerst die Schulen verschieben, archivieren oder löschen.");
+            }
+            if (!"MANUELL".equals(vorher.quelle()) && !"SONDERFALL".equals(vorher.quelle())) {
+                throw new OperatorConflictException(
+                    "Nur manuell angelegte Schulträger ohne Landeslisten-Bezug können endgültig gelöscht werden.");
+            }
+
+            try (PreparedStatement cleanup = connection.prepareStatement("DELETE FROM ansprechpartner WHERE tenant_id = ?")) {
+                cleanup.setObject(1, id);
+                cleanup.executeUpdate();
+            }
+
+            try (PreparedStatement statement = connection.prepareStatement("DELETE FROM schultraeger WHERE id = ?")) {
+                statement.setObject(1, id);
+                statement.executeUpdate();
+            } catch (final SQLException e) {
+                if (POSTGRES_FOREIGN_KEY_VIOLATION.equals(e.getSQLState())) {
+                    throw new OperatorConflictException("Dieser Schulträger kann nicht gelöscht werden, da noch "
+                        + "abhängige Datensätze existieren (z. B. registrierte SVWS-Instanzen).");
+                }
+                throw e;
+            }
+
+            return new OperatorOutcome<>(Boolean.TRUE, id, id, null);
+        });
+    }
+
+    private long countSchulen(final java.sql.Connection connection, final UUID tenantId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("SELECT count(*) FROM schule WHERE tenant_id = ?")) {
+            statement.setObject(1, tenantId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return resultSet.getLong(1);
+            }
+        }
+    }
+
     private SchultraegerDto selectById(final java.sql.Connection connection, final UUID id) throws SQLException {
         final String sql = "SELECT " + SELECT_COLUMNS + " FROM schultraeger WHERE id = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -192,6 +258,9 @@ public class SchultraegerService {
             resultSet.getString("ort"),
             resultSet.getString("beschreibung"),
             resultSet.getBoolean("aktiv"),
+            (UUID) resultSet.getObject("katalog_id"),
+            resultSet.getString("quelle"),
+            resultSet.getString("sonderfall_hinweis"),
             resultSet.getTimestamp("created_at").toInstant(),
             resultSet.getTimestamp("updated_at").toInstant());
     }

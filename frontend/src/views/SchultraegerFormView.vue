@@ -4,10 +4,12 @@ import { useRouter } from 'vue-router'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Modal from '@/components/Modal.vue'
 import { useAnsprechpartnerStore } from '@/stores/ansprechpartnerStore'
+import { useSchuldateiStore } from '@/stores/schuldateiStore'
 import { useSchuleStore } from '@/stores/schuleStore'
 import { useSchultraegerStore } from '@/stores/schultraegerStore'
 import { ApiError } from '@/types/problem'
 import type { Ansprechpartner } from '@/types/ansprechpartner'
+import type { SchultraegerKatalog } from '@/types/schuldatei'
 import type { Schultraeger } from '@/types/schultraeger'
 
 const props = defineProps<{ id?: string }>()
@@ -16,6 +18,7 @@ const router = useRouter()
 const store = useSchultraegerStore()
 const ansprechpartnerStore = useAnsprechpartnerStore()
 const schuleStore = useSchuleStore()
+const schuldateiStore = useSchuldateiStore()
 
 const geladenerSchultraeger = ref<Schultraeger | null>(null)
 
@@ -30,8 +33,44 @@ const fehler = ref<string | null>(null)
 
 const bearbeitenModalOffen = ref(false)
 const zuDeaktivierenBestaetigen = ref(false)
+const zuLoeschenBestaetigen = ref(false)
 
 const bearbeitenModus = !!props.id
+
+// --- Übernahme aus dem Schuldatei-Katalog beim Neuanlegen (ADR-020 "Schritt 2") -----
+// Sonderfälle (Schulträger ohne Katalogeintrag) bleiben möglich: Ohne Katalogauswahl kann die
+// Herkunft optional als Sonderfall mit Begründung markiert werden, sonst gilt MANUELL.
+const katalogAuswahlOffen = ref(false)
+const katalogSuchbegriff = ref('')
+const ausgewaehlterKatalogEintrag = ref<SchultraegerKatalog | null>(null)
+const istSonderfall = ref(false)
+const sonderfallHinweis = ref('')
+
+async function katalogAuswahlOeffnen(): Promise<void> {
+  katalogAuswahlOffen.value = true
+  katalogSuchbegriff.value = ''
+  await schuldateiStore.fetchSchultraeger({ page: 0, q: '', nurAktive: true })
+}
+
+async function katalogSuchen(): Promise<void> {
+  await schuldateiStore.fetchSchultraeger({ page: 0, q: katalogSuchbegriff.value })
+}
+
+function katalogEintragUebernehmen(eintrag: SchultraegerKatalog): void {
+  name.value = eintrag.traegername
+  traegernummer.value = eintrag.traegernummer
+  strasse.value = eintrag.strasse ?? ''
+  plz.value = eintrag.plz ?? ''
+  ort.value = eintrag.ort ?? ''
+  ausgewaehlterKatalogEintrag.value = eintrag
+  istSonderfall.value = false
+  sonderfallHinweis.value = ''
+  katalogAuswahlOffen.value = false
+}
+
+function katalogAuswahlAufheben(): void {
+  ausgewaehlterKatalogEintrag.value = null
+}
 
 onMounted(async () => {
   if (props.id) {
@@ -74,11 +113,23 @@ async function reaktivieren(): Promise<void> {
   geladenerSchultraeger.value = await store.reactivate(props.id)
 }
 
+async function bestaetigenEndgueltigLoeschen(): Promise<void> {
+  if (!props.id) return
+  fehler.value = null
+  zuLoeschenBestaetigen.value = false
+  try {
+    await store.deleteEndgueltig(props.id)
+    await router.push({ name: 'schultraeger-liste' })
+  } catch (error) {
+    fehler.value = error instanceof ApiError ? error.message : 'Löschen fehlgeschlagen.'
+  }
+}
+
 async function absenden(): Promise<void> {
   fehler.value = null
   speichern.value = true
   try {
-    const daten = {
+    const basisDaten = {
       name: name.value,
       traegernummer: traegernummer.value,
       strasse: strasse.value || undefined,
@@ -87,10 +138,15 @@ async function absenden(): Promise<void> {
       beschreibung: beschreibung.value || undefined,
     }
     if (props.id) {
-      geladenerSchultraeger.value = await store.update(props.id, daten)
+      geladenerSchultraeger.value = await store.update(props.id, basisDaten)
       bearbeitenModalOffen.value = false
     } else {
-      await store.create(daten)
+      await store.create({
+        ...basisDaten,
+        katalogId: ausgewaehlterKatalogEintrag.value?.id,
+        sonderfall: istSonderfall.value,
+        sonderfallHinweis: sonderfallHinweis.value || undefined,
+      })
       await router.push({ name: 'schultraeger-liste' })
     }
   } catch (error) {
@@ -254,12 +310,47 @@ async function bestaetigenAnsprechpartnerLoeschen(): Promise<void> {
             <p>Der Schulträger wird wieder aktiv nutzbar.</p>
             <button type="button" class="button-primary" @click="reaktivieren">Reaktivieren</button>
           </article>
+
+          <article class="operation-karte gefahr">
+            <h3>Schulträger endgültig löschen</h3>
+            <p>
+              Nur möglich für manuell angelegte Schulträger ohne Schulen (kein Landeslisten-Bezug). Diese Aktion kann
+              nicht rückgängig gemacht werden.
+            </p>
+            <button type="button" class="danger" @click="zuLoeschenBestaetigen = true">Endgültig löschen</button>
+          </article>
         </div>
       </section>
     </template>
 
     <form v-else @submit.prevent="absenden">
       <p v-if="fehler" role="alert" class="fehler">{{ fehler }}</p>
+
+      <div class="katalog-bereich">
+        <div v-if="ausgewaehlterKatalogEintrag" class="katalog-badge">
+          <span class="status status-aktiv">
+            Aus der Schuldatei übernommen: {{ ausgewaehlterKatalogEintrag.traegernummer }}
+          </span>
+          <button type="button" class="button-secondary btn-klein" @click="katalogAuswahlAufheben">
+            Auswahl aufheben
+          </button>
+        </div>
+        <button v-else type="button" class="button-secondary" @click="katalogAuswahlOeffnen">
+          Aus Schuldatei übernehmen …
+        </button>
+      </div>
+
+      <div v-if="!ausgewaehlterKatalogEintrag" class="feld feld-checkbox">
+        <label>
+          <input v-model="istSonderfall" type="checkbox" />
+          Sonderfall (kein Eintrag in der Schuldatei)
+        </label>
+      </div>
+
+      <div v-if="!ausgewaehlterKatalogEintrag && istSonderfall" class="feld">
+        <label for="sonderfall-hinweis">Begründung</label>
+        <textarea id="sonderfall-hinweis" v-model="sonderfallHinweis" rows="2"></textarea>
+      </div>
 
       <div class="feld">
         <label for="name">Name</label>
@@ -408,6 +499,37 @@ async function bestaetigenAnsprechpartnerLoeschen(): Promise<void> {
       </div>
     </section>
 
+    <Modal
+      :open="katalogAuswahlOffen"
+      titel="Schulträger aus der Schuldatei übernehmen"
+      @close="katalogAuswahlOffen = false"
+    >
+      <form class="katalog-suche" @submit.prevent="katalogSuchen">
+        <div class="feld">
+          <label for="katalog-suche">Suche nach Name, Trägernummer oder Ort</label>
+          <input id="katalog-suche" v-model="katalogSuchbegriff" type="search" />
+        </div>
+        <button type="submit" class="button-secondary">Suchen</button>
+      </form>
+
+      <p v-if="schuldateiStore.schultraegerError" role="alert" class="fehler">
+        {{ schuldateiStore.schultraegerError }}
+      </p>
+      <p v-else-if="schuldateiStore.schultraegerLoading">Lädt …</p>
+      <ul v-else class="katalog-liste">
+        <li v-for="eintrag in schuldateiStore.schultraeger" :key="eintrag.id">
+          <div>
+            <strong>{{ eintrag.traegername }}</strong>
+            <span class="katalog-hinweis">{{ eintrag.traegernummer }} · {{ eintrag.ort ?? '–' }}</span>
+          </div>
+          <button type="button" class="button-secondary btn-klein" @click="katalogEintragUebernehmen(eintrag)">
+            Übernehmen
+          </button>
+        </li>
+        <li v-if="schuldateiStore.schultraeger.length === 0" class="katalog-hinweis">Keine Treffer.</li>
+      </ul>
+    </Modal>
+
     <Modal :open="bearbeitenModalOffen" titel="Schulträger bearbeiten" @close="bearbeitenSchliessen">
       <form @submit.prevent="absenden">
         <p v-if="fehler" role="alert" class="fehler">{{ fehler }}</p>
@@ -515,9 +637,19 @@ async function bestaetigenAnsprechpartnerLoeschen(): Promise<void> {
     />
 
     <ConfirmDialog
+      :open="zuLoeschenBestaetigen"
+      titel="Schulträger endgültig löschen"
+      :nachricht="`Soll '${geladenerSchultraeger?.name}' unwiderruflich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden.`"
+      bestaetigen-text="Endgültig löschen"
+      @confirm="bestaetigenEndgueltigLoeschen"
+      @cancel="zuLoeschenBestaetigen = false"
+    />
+
+    <ConfirmDialog
       :open="zuLoeschenderAnsprechpartner !== null"
       titel="Ansprechpartner löschen"
       :nachricht="`Soll '${zuLoeschenderAnsprechpartner?.vorname} ${zuLoeschenderAnsprechpartner?.name}' wirklich gelöscht werden?`"
+      bestaetigen-text="Löschen"
       @confirm="bestaetigenAnsprechpartnerLoeschen"
       @cancel="zuLoeschenderAnsprechpartner = null"
     />
@@ -562,6 +694,64 @@ main {
 
 .feld-kompakt {
   max-width: 10rem;
+}
+
+.feld-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: normal;
+}
+
+.katalog-bereich {
+  margin-bottom: 1.25rem;
+}
+
+.katalog-badge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.katalog-suche {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.katalog-suche .feld {
+  flex: 1 1 auto;
+  margin-bottom: 0;
+  max-width: none;
+}
+
+.katalog-liste {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.katalog-liste li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.katalog-hinweis {
+  display: block;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
 }
 
 .aktionen {

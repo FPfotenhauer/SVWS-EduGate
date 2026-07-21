@@ -1,5 +1,10 @@
 import { apiRequest, type AccessTokenProvider } from './httpClient'
-import type { Schultraeger, SchultraegerFormData, SchultraegerPage } from '@/types/schultraeger'
+import type {
+  Schultraeger,
+  SchultraegerCreateFormData,
+  SchultraegerFormData,
+  SchultraegerPage,
+} from '@/types/schultraeger'
 
 const BASE_PATH = '/schultraeger'
 
@@ -19,7 +24,7 @@ export function getSchultraeger(id: string, getAccessToken: AccessTokenProvider)
 }
 
 export function createSchultraeger(
-  data: SchultraegerFormData,
+  data: SchultraegerCreateFormData,
   getAccessToken: AccessTokenProvider,
 ): Promise<Schultraeger> {
   return apiRequest<Schultraeger>(BASE_PATH, { method: 'POST', body: data, getAccessToken })
@@ -35,6 +40,11 @@ export function updateSchultraeger(
 
 export function deactivateSchultraeger(id: string, getAccessToken: AccessTokenProvider): Promise<void> {
   return apiRequest<void>(`${BASE_PATH}/${id}`, { method: 'DELETE', getAccessToken })
+}
+
+/** Endgültiges Löschen (im Unterschied zu deactivateSchultraeger): nur ohne Schulen und ohne Landeslisten-Bezug. */
+export function deleteSchultraegerEndgueltig(id: string, getAccessToken: AccessTokenProvider): Promise<void> {
+  return apiRequest<void>(`${BASE_PATH}/${id}/endgueltig`, { method: 'DELETE', getAccessToken })
 }
 
 export function reactivateSchultraeger(id: string, getAccessToken: AccessTokenProvider): Promise<Schultraeger> {

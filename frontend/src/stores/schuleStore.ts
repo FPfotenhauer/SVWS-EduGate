@@ -48,7 +48,12 @@ export const useSchuleStore = defineStore('schule', () => {
     return deactivated
   }
 
-  return { items, loading, errorMessage, fetchList, create, update, get, deactivate }
+  async function deleteEndgueltig(schultraegerId: string, id: string): Promise<void> {
+    await schuleApi.deleteSchuleEndgueltig(schultraegerId, id, accessToken)
+    await fetchList(schultraegerId)
+  }
+
+  return { items, loading, errorMessage, fetchList, create, update, get, deactivate, deleteEndgueltig }
 })
 
 function toErrorMessage(error: unknown): string {

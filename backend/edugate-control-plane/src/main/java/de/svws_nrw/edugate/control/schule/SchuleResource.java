@@ -69,6 +69,13 @@ public class SchuleResource {
         return service.deactivate(adminSubject(), schultraegerId, id);
     }
 
+    @DELETE
+    @Path("/{id}/endgueltig")
+    public Response delete(@PathParam("schultraegerId") final UUID schultraegerId, @PathParam("id") final UUID id) {
+        service.delete(adminSubject(), schultraegerId, id);
+        return Response.noContent().build();
+    }
+
     private String adminSubject() {
         return securityIdentity.getPrincipal().getName();
     }

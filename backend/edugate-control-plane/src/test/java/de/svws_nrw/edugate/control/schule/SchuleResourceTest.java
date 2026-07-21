@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 class SchuleResourceTest {
 
     private static final String SCHULTRAEGER_PATH = "/admin/api/v1/schultraeger";
+    private static final String SVWS_INSTANZ_PATH = "/admin/api/v1/svws-instanzen";
     private static final String ADMIN_USER = "admin@edugate.local";
 
     @Test
@@ -199,6 +200,98 @@ class SchuleResourceTest {
             .contentType("application/problem+json");
 
         given().when().get(schulenPath(schultraegerA) + "/" + schuleId).then().statusCode(200).body("aktiv", equalTo(true));
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void endgueltigesLoeschenOhneSchemataEntferntSchule() {
+        final String schultraegerId = neuenSchultraegerAnlegen();
+        final String path = schulenPath(schultraegerId);
+        final String createBody = "{\"schulnummer\": \"888881\", \"name\": \"Zu löschende Schule\"}";
+        final String id = given().contentType(ContentType.JSON).body(createBody).when().post(path)
+            .then().statusCode(201).extract().path("id");
+
+        given().when().delete(path + "/" + id + "/endgueltig").then().statusCode(204);
+
+        given().when().get(path + "/" + id).then().statusCode(404);
+        assertThat(auditOutcomesFor(UUID.fromString(id), "SCHULE_DELETE")).containsExactly("SUCCESS");
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void endgueltigesLoeschenEntferntAuchVorbereiteteSchemata() {
+        final String schultraegerId = neuenSchultraegerAnlegen();
+        final String path = schulenPath(schultraegerId);
+        final String createBody = "{\"schulnummer\": \"888882\", \"name\": \"Schule mit geplantem Schema\"}";
+        final String id = given().contentType(ContentType.JSON).body(createBody).when().post(path)
+            .then().statusCode(201).extract().path("id");
+        final String instanzId = neueSvwsInstanzAnlegen();
+        geplantesSchemaAnlegen(schultraegerId, id, instanzId, "888882");
+
+        given().when().delete(path + "/" + id + "/endgueltig").then().statusCode(204);
+
+        given().when().get(path + "/" + id).then().statusCode(404);
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void endgueltigesLoeschenBlockiertBeiEchtemSchema() {
+        final String schultraegerId = neuenSchultraegerAnlegen();
+        final String path = schulenPath(schultraegerId);
+        final String createBody = "{\"schulnummer\": \"888883\", \"name\": \"Schule mit echtem Schema\"}";
+        final String id = given().contentType(ContentType.JSON).body(createBody).when().post(path)
+            .then().statusCode(201).extract().path("id");
+        final String instanzId = neueSvwsInstanzAnlegen();
+        final String schemaId = geplantesSchemaAnlegen(schultraegerId, id, instanzId, "888883");
+        schemaAufEchtenStatusHeben(schultraegerId, id, instanzId, schemaId, "888883");
+
+        given()
+            .when().delete(path + "/" + id + "/endgueltig")
+            .then()
+            .statusCode(409)
+            .contentType("application/problem+json")
+            .body("detail", org.hamcrest.Matchers.containsString("888883"));
+
+        given().when().get(path + "/" + id).then().statusCode(200);
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void endgueltigesLoeschenUnbekannterSchuleErgibt404() {
+        final String path = schulenPath(neuenSchultraegerAnlegen());
+
+        given()
+            .when().delete(path + "/" + UUID.randomUUID() + "/endgueltig")
+            .then()
+            .statusCode(404)
+            .contentType("application/problem+json");
+    }
+
+    private static String neueSvwsInstanzAnlegen() {
+        final String baseUrl = "https://svws-schule-test-" + UUID.randomUUID() + ".example.org";
+        final String body = "{\"name\": \"Instanz-" + UUID.randomUUID() + "\", \"baseUrl\": \"" + baseUrl + "\"}";
+        return given().contentType(ContentType.JSON).body(body).when().post(SVWS_INSTANZ_PATH)
+            .then().statusCode(201).extract().path("id");
+    }
+
+    private static String geplantesSchemaAnlegen(final String schultraegerId, final String schuleId, final String instanzId,
+            final String schemaName) {
+        final String path = schemataPath(schultraegerId, schuleId);
+        final String body = "{\"instanzId\": \"" + instanzId + "\", \"schemaName\": \"" + schemaName + "\", "
+            + "\"umgebung\": \"TEST\"}";
+        return given().contentType(ContentType.JSON).body(body).when().post(path).then().statusCode(201).extract().path("id");
+    }
+
+    private static void schemaAufEchtenStatusHeben(final String schultraegerId, final String schuleId, final String instanzId,
+            final String schemaId, final String schemaName) {
+        final String path = schemataPath(schultraegerId, schuleId);
+        final String updateBody = "{\"instanzId\": \"" + instanzId + "\", \"schemaName\": \"" + schemaName + "\", "
+            + "\"umgebung\": \"TEST\", \"status\": \"AKTIV\", \"aktiv\": true}";
+        given().contentType(ContentType.JSON).body(updateBody).when().put(path + "/" + schemaId).then().statusCode(200);
+    }
+
+    private static String schemataPath(final String schultraegerId, final String schuleId) {
+        return SCHULTRAEGER_PATH + "/" + schultraegerId + "/schulen/" + schuleId + "/schemata";
     }
 
     private List<String> auditOutcomesFor(final UUID entityId, final String action) {

@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { useAuthStore } from '@/auth/authStore'
 import * as schultraegerApi from '@/api/schultraegerApi'
 import { ApiError } from '@/types/problem'
-import type { Schultraeger, SchultraegerFormData } from '@/types/schultraeger'
+import type { Schultraeger, SchultraegerCreateFormData, SchultraegerFormData } from '@/types/schultraeger'
 
 export const useSchultraegerStore = defineStore('schultraeger', () => {
   const items = ref<Schultraeger[]>([])
@@ -40,7 +40,7 @@ export const useSchultraegerStore = defineStore('schultraeger', () => {
     }
   }
 
-  async function create(data: SchultraegerFormData): Promise<Schultraeger> {
+  async function create(data: SchultraegerCreateFormData): Promise<Schultraeger> {
     const created = await schultraegerApi.createSchultraeger(data, accessToken)
     await fetchList()
     return created
@@ -54,6 +54,11 @@ export const useSchultraegerStore = defineStore('schultraeger', () => {
 
   async function deactivate(id: string): Promise<void> {
     await schultraegerApi.deactivateSchultraeger(id, accessToken)
+    await fetchList()
+  }
+
+  async function deleteEndgueltig(id: string): Promise<void> {
+    await schultraegerApi.deleteSchultraegerEndgueltig(id, accessToken)
     await fetchList()
   }
 
@@ -79,6 +84,7 @@ export const useSchultraegerStore = defineStore('schultraeger', () => {
     create,
     update,
     deactivate,
+    deleteEndgueltig,
     reactivate,
     get,
   }

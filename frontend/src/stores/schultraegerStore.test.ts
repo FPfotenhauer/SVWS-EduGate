@@ -18,6 +18,9 @@ const beispielSchultraeger: Schultraeger = {
   ort: null,
   beschreibung: null,
   aktiv: true,
+  katalogId: null,
+  quelle: 'MANUELL',
+  sonderfallHinweis: null,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
 }
@@ -85,6 +88,34 @@ describe('schultraegerStore', () => {
     await store.deactivate(beispielSchultraeger.id)
 
     expect(deactivateSpy).toHaveBeenCalledWith(beispielSchultraeger.id, expect.any(Function))
+  })
+
+  it('deleteEndgueltig ruft die API mit der id auf und lädt die Liste danach neu', async () => {
+    const deleteSpy = vi.spyOn(schultraegerApi, 'deleteSchultraegerEndgueltig').mockResolvedValue(undefined)
+    const listSpy = vi
+      .spyOn(schultraegerApi, 'listSchultraeger')
+      .mockResolvedValue({ items: [], page: 0, size: 25, totalElements: 0 })
+
+    const store = useSchultraegerStore()
+    await store.deleteEndgueltig(beispielSchultraeger.id)
+
+    expect(deleteSpy).toHaveBeenCalledWith(beispielSchultraeger.id, expect.any(Function))
+    expect(listSpy).toHaveBeenCalled()
+  })
+
+  it('deleteEndgueltig wirft den Fehler weiter, wenn der Schultraeger nicht gelöscht werden darf', async () => {
+    vi.spyOn(schultraegerApi, 'deleteSchultraegerEndgueltig').mockRejectedValue(
+      new ApiError(409, {
+        type: 'urn:problem-type:conflict',
+        title: 'Konflikt',
+        status: 409,
+        detail: 'Dieser Schulträger hat noch 2 Schulen.',
+        instance: null,
+      }),
+    )
+
+    const store = useSchultraegerStore()
+    await expect(store.deleteEndgueltig(beispielSchultraeger.id)).rejects.toBeInstanceOf(ApiError)
   })
 
   it('reactivate ruft die API mit der id auf und lädt die Liste danach neu', async () => {

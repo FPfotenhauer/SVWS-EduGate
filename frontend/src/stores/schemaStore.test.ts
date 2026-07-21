@@ -109,6 +109,32 @@ describe('schemaStore', () => {
     expect(listSpy).toHaveBeenCalledWith(SCHULTRAEGER_ID, SCHULE_ID, expect.any(Function))
   })
 
+  it('destroy ruft die API auf, lädt die Liste danach neu und liefert das Ergebnis', async () => {
+    const destroySpy = vi.spyOn(schemaApi, 'destroySchemaOnInstanz').mockResolvedValue({ success: true, message: null })
+    const listSpy = vi.spyOn(schemaApi, 'listSchemata').mockResolvedValue([])
+
+    const store = useSchemaStore()
+    const result = await store.destroy(SCHULTRAEGER_ID, SCHULE_ID, beispielSchema.id)
+
+    expect(destroySpy).toHaveBeenCalledWith(SCHULTRAEGER_ID, SCHULE_ID, beispielSchema.id, expect.any(Function))
+    expect(listSpy).toHaveBeenCalledWith(SCHULTRAEGER_ID, SCHULE_ID, expect.any(Function))
+    expect(result).toEqual({ success: true, message: null })
+  })
+
+  it('destroy liefert einen fachlichen Fehlschlag unverändert weiter, ohne eine Exception zu werfen', async () => {
+    vi.spyOn(schemaApi, 'destroySchemaOnInstanz').mockResolvedValue({
+      success: false,
+      message: 'Keine Zugangsdaten für die SVWS-Instanz hinterlegt.',
+    })
+    vi.spyOn(schemaApi, 'listSchemata').mockResolvedValue([beispielSchema])
+
+    const store = useSchemaStore()
+    const result = await store.destroy(SCHULTRAEGER_ID, SCHULE_ID, beispielSchema.id)
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('Zugangsdaten')
+  })
+
   it('namingSuggestion ruft die API mit Umgebung auf', async () => {
     const suggestionSpy = vi
       .spyOn(schemaApi, 'schemaNamingSuggestion')

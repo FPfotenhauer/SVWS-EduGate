@@ -29,4 +29,12 @@ public interface SvwsPrivilegedApiClient {
      * Benötigt Datenbank-Rechte auf dem angegebenen Schema, nicht zwingend root-Rechte.
      */
     SvwsSchulInfoResult getSchulInfo(String baseUrl, String username, String password, String schemaName);
+
+    /**
+     * Ruft {@code POST /api/schema/root/destroy/{schema}} auf und entfernt das Schema unwiderruflich
+     * von der SVWS-Instanz (Docs: "Löschen"). Benötigt privilegierte (root-)Zugangsdaten. Der Aufruf
+     * selbst ist irreversibel - ein Backup vor dem Aufruf liegt in der Verantwortung des Betreibers,
+     * nicht dieses Ports.
+     */
+    SvwsSchemaDestroyResult destroySchema(String baseUrl, String username, String password, String schemaName);
 }

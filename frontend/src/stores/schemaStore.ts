@@ -3,7 +3,13 @@ import { ref } from 'vue'
 import { useAuthStore } from '@/auth/authStore'
 import * as schemaApi from '@/api/schemaApi'
 import { ApiError } from '@/types/problem'
-import type { Schema, SchemaCreateFormData, SchemaNamingSuggestion, SchemaUpdateFormData } from '@/types/schema'
+import type {
+  Schema,
+  SchemaCreateFormData,
+  SchemaDestroyResult,
+  SchemaNamingSuggestion,
+  SchemaUpdateFormData,
+} from '@/types/schema'
 
 export const useSchemaStore = defineStore('schema', () => {
   const items = ref<Schema[]>([])
@@ -48,6 +54,12 @@ export const useSchemaStore = defineStore('schema', () => {
     await fetchList(schultraegerId, schuleId)
   }
 
+  async function destroy(schultraegerId: string, schuleId: string, id: string): Promise<SchemaDestroyResult> {
+    const ergebnis = await schemaApi.destroySchemaOnInstanz(schultraegerId, schuleId, id, accessToken)
+    await fetchList(schultraegerId, schuleId)
+    return ergebnis
+  }
+
   function namingSuggestion(
     schultraegerId: string,
     schuleId: string,
@@ -56,7 +68,7 @@ export const useSchemaStore = defineStore('schema', () => {
     return schemaApi.schemaNamingSuggestion(schultraegerId, schuleId, umgebung, accessToken)
   }
 
-  return { items, loading, errorMessage, fetchList, create, update, deactivate, namingSuggestion }
+  return { items, loading, errorMessage, fetchList, create, update, deactivate, destroy, namingSuggestion }
 })
 
 function toErrorMessage(error: unknown): string {

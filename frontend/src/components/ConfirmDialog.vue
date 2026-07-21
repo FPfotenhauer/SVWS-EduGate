@@ -1,9 +1,13 @@
 <script setup lang="ts">
-defineProps<{
-  open: boolean
-  titel: string
-  nachricht: string
-}>()
+withDefaults(
+  defineProps<{
+    open: boolean
+    titel: string
+    nachricht: string
+    bestaetigenText?: string
+  }>(),
+  { bestaetigenText: 'Deaktivieren' },
+)
 
 const emit = defineEmits<{ confirm: []; cancel: [] }>()
 </script>
@@ -15,7 +19,7 @@ const emit = defineEmits<{ confirm: []; cancel: [] }>()
       <p>{{ nachricht }}</p>
       <div class="dialog-actions">
         <button type="button" @click="emit('cancel')">Abbrechen</button>
-        <button type="button" class="danger" autofocus @click="emit('confirm')">Deaktivieren</button>
+        <button type="button" class="danger" autofocus @click="emit('confirm')">{{ bestaetigenText }}</button>
       </div>
     </div>
   </div>

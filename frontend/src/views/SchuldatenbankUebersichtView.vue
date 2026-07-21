@@ -151,7 +151,7 @@ async function neueSchuleAbsenden(): Promise<void> {
   <main>
     <header class="toolbar">
       <h1>Schuldatenbanken</h1>
-      <button type="button" class="button-primary" @click="neueSchuleOeffnen">Neue Schule anlegen</button>
+      <button type="button" class="button-primary" @click="neueSchuleOeffnen">Datenbank anlegen</button>
     </header>
 
     <form class="search" @submit.prevent="suchen">

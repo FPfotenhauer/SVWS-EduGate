@@ -1,6 +1,7 @@
 package de.svws_nrw.edugate.control.schema;
 
 import de.svws_nrw.edugate.control.schema.dto.SchemaCreateRequest;
+import de.svws_nrw.edugate.control.schema.dto.SchemaDestroyResultDto;
 import de.svws_nrw.edugate.control.schema.dto.SchemaDto;
 import de.svws_nrw.edugate.control.schema.dto.SchemaNamingSuggestionDto;
 import de.svws_nrw.edugate.control.schema.dto.SchemaUpdateRequest;
@@ -73,6 +74,19 @@ public class SchemaResource {
     public SchemaDto deactivate(@PathParam("schultraegerId") final UUID schultraegerId,
             @PathParam("schuleId") final UUID schuleId, @PathParam("id") final UUID id) {
         return service.deactivate(adminSubject(), schultraegerId, schuleId, id);
+    }
+
+    /**
+     * Löscht ein echtes Schema unwiderruflich über die SVWS-Privileged-API (ADR-014). Liefert bei
+     * einem fachlichen Fehlschlag (fehlende Zugangsdaten, SVWS-seitige Ablehnung, Netzwerkfehler)
+     * bewusst 200 mit {@code success=false} statt eines 5xx - siehe {@code SchemaService#destroy}.
+     */
+    @POST
+    @Path("/{id}/loeschen-auf-instanz")
+    @Consumes(MediaType.WILDCARD)
+    public SchemaDestroyResultDto destroy(@PathParam("schultraegerId") final UUID schultraegerId,
+            @PathParam("schuleId") final UUID schuleId, @PathParam("id") final UUID id) {
+        return service.destroy(adminSubject(), schultraegerId, schuleId, id);
     }
 
     private String adminSubject() {

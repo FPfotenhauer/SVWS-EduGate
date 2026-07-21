@@ -2,17 +2,24 @@ package de.svws_nrw.edugate.control.schema;
 
 import de.svws_nrw.edugate.control.operator.AuditAction;
 import de.svws_nrw.edugate.control.operator.AuditOutcome;
+import de.svws_nrw.edugate.control.operator.OperatorAccess;
 import de.svws_nrw.edugate.control.operator.OperatorConflictException;
 import de.svws_nrw.edugate.control.operator.OperatorNotFoundException;
+import de.svws_nrw.edugate.control.operator.OperatorOutcome;
 import de.svws_nrw.edugate.control.schema.dto.SchemaCreateRequest;
+import de.svws_nrw.edugate.control.schema.dto.SchemaDestroyResultDto;
 import de.svws_nrw.edugate.control.schema.dto.SchemaDto;
 import de.svws_nrw.edugate.control.schema.dto.SchemaNamingSuggestionDto;
 import de.svws_nrw.edugate.control.schema.dto.SchemaUpdateRequest;
 import de.svws_nrw.edugate.control.tenant.TenantAccess;
 import de.svws_nrw.edugate.core.domain.SchemaSource;
 import de.svws_nrw.edugate.core.domain.SchemaStatus;
+import de.svws_nrw.edugate.core.secret.SecretStore;
+import de.svws_nrw.edugate.core.svws.SvwsPrivilegedApiClient;
+import de.svws_nrw.edugate.core.svws.SvwsSchemaDestroyResult;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -62,7 +69,16 @@ public class SchemaService {
     TenantAccess tenantAccess;
 
     @Inject
+    OperatorAccess operatorAccess;
+
+    @Inject
     SchemaNamingService namingService;
+
+    @Inject
+    SecretStore secretStore;
+
+    @Inject
+    SvwsPrivilegedApiClient privilegedApiClient;
 
     public List<SchemaDto> list(final UUID schultraegerId, final UUID schuleId) {
         return tenantAccess.execute(schultraegerId, connection -> {
@@ -174,6 +190,104 @@ public class SchemaService {
                 }
             }
         });
+    }
+
+    /**
+     * Löscht ein <b>echtes</b> Schema (Status ungleich GEPLANT) über die SVWS-Privileged-API
+     * (ADR-014, {@code POST /api/schema/root/destroy/{schema}}) und entfernt bei Erfolg den
+     * lokalen Datensatz, damit keine verwaiste Zeile ein nicht mehr existierendes Schema
+     * referenziert. Ein fachlicher Fehlschlag (fehlende Zugangsdaten, SVWS-seitige Ablehnung,
+     * Netzwerkfehler) wirft - analog zu {@code SvwsSchemaFundService#sync} - keine Exception,
+     * sondern liefert ein {@link SchemaDestroyResultDto} mit {@code success=false}; der Versuch
+     * selbst gilt als durchgeführt und wird auditiert. Nur eine ungültige Vorbedingung (Schema
+     * nicht gefunden, noch nicht real angelegt) bleibt ein echter 404/409-Fehler.
+     *
+     * <p>Läuft bewusst über {@link OperatorAccess} statt {@link TenantAccess}: svws_instanz ist
+     * seit ADR-011 eine mandantenübergreifende Betriebsressource ohne tenant_id-Spalte, auf die
+     * edugate_control (die TenantAccess-Rolle) keinerlei Rechte mehr hat - identisch zum Grund,
+     * warum bereits {@code SvwsSchemaFundService#assign} für das Zuordnen eines Funds zu einer
+     * Schule über OperatorAccess läuft. schema/schule bleiben dabei explizit per tenant_id-Parameter
+     * gefiltert statt über den (hier nicht gesetzten) RLS-Tenant-Kontext.
+     */
+    public SchemaDestroyResultDto destroy(final String adminSubject, final UUID schultraegerId, final UUID schuleId,
+            final UUID id) {
+        return operatorAccess.execute(adminSubject, AuditAction.SCHEMA_DESTROY, "schema", connection -> {
+            final SchemaRow schema = selectSchemaRow(connection, schultraegerId, schuleId, id);
+            if (schema.status() == SchemaStatus.GEPLANT) {
+                throw new OperatorConflictException(
+                    "Dieses Schema wurde noch nicht real angelegt und kann daher nicht über die SVWS-Instanz gelöscht werden.");
+            }
+
+            final InstanzRow instanz = loadInstanz(connection, schema.instanzId());
+            if (instanz.credentialsEncrypted() == null) {
+                final SchemaDestroyResultDto ergebnis = new SchemaDestroyResultDto(false,
+                    "Keine Zugangsdaten für die SVWS-Instanz hinterlegt - Löschen über die privilegierte API nicht möglich.");
+                return new OperatorOutcome<>(ergebnis, id, schultraegerId, detailsJsonForDestroy(schema.schemaName(), ergebnis));
+            }
+
+            final String decrypted = new String(secretStore.decrypt(instanz.credentialsEncrypted()), StandardCharsets.UTF_8);
+            final int separator = decrypted.indexOf(':');
+            final String username = separator < 0 ? decrypted : decrypted.substring(0, separator);
+            final String password = separator < 0 ? "" : decrypted.substring(separator + 1);
+
+            final SvwsSchemaDestroyResult apiResult =
+                privilegedApiClient.destroySchema(instanz.baseUrl(), username, password, schema.schemaName());
+            if (apiResult.success()) {
+                deleteSchemaRow(connection, id);
+            }
+
+            final SchemaDestroyResultDto ergebnis = new SchemaDestroyResultDto(apiResult.success(),
+                apiResult.success() ? null : apiResult.message());
+            return new OperatorOutcome<>(ergebnis, id, schultraegerId, detailsJsonForDestroy(schema.schemaName(), ergebnis));
+        });
+    }
+
+    private String detailsJsonForDestroy(final String schemaName, final SchemaDestroyResultDto ergebnis) {
+        return "{\"schemaName\":\"" + escapeJson(schemaName) + "\",\"success\":" + ergebnis.success() + "}";
+    }
+
+    private record SchemaRow(UUID instanzId, String schemaName, SchemaStatus status) {
+    }
+
+    private record InstanzRow(String baseUrl, byte[] credentialsEncrypted) {
+    }
+
+    private SchemaRow selectSchemaRow(final Connection connection, final UUID schultraegerId, final UUID schuleId,
+            final UUID id) throws SQLException {
+        final String sql = "SELECT instanz_id, schema_name, status FROM schema "
+            + "WHERE id = ? AND schule_id = ? AND tenant_id = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, id);
+            statement.setObject(2, schuleId);
+            statement.setObject(3, schultraegerId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    throw new OperatorNotFoundException("Schema '" + id + "' wurde nicht gefunden.");
+                }
+                return new SchemaRow((UUID) resultSet.getObject("instanz_id"), resultSet.getString("schema_name"),
+                    SchemaStatus.valueOf(resultSet.getString("status")));
+            }
+        }
+    }
+
+    private InstanzRow loadInstanz(final Connection connection, final UUID instanzId) throws SQLException {
+        final String sql = "SELECT base_url, credentials_encrypted FROM svws_instanz WHERE id = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, instanzId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    throw new OperatorNotFoundException("SVWS-Instanz '" + instanzId + "' wurde nicht gefunden.");
+                }
+                return new InstanzRow(resultSet.getString("base_url"), resultSet.getBytes("credentials_encrypted"));
+            }
+        }
+    }
+
+    private void deleteSchemaRow(final Connection connection, final UUID id) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("DELETE FROM schema WHERE id = ?")) {
+            statement.setObject(1, id);
+            statement.executeUpdate();
+        }
     }
 
     private String requireSchuleInTenant(final Connection connection, final UUID schuleId) throws SQLException {

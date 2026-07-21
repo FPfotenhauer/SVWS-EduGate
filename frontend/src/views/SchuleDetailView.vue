@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Modal from '@/components/Modal.vue'
 import { useSchemaStore } from '@/stores/schemaStore'
@@ -9,6 +9,7 @@ import { useSchuleStore } from '@/stores/schuleStore'
 import { useSchultraegerStore } from '@/stores/schultraegerStore'
 import { useSvwsInstanzStore } from '@/stores/svwsInstanzStore'
 import { ApiError } from '@/types/problem'
+import type { Schema } from '@/types/schema'
 import type { Schule } from '@/types/schule'
 import type { Schultraeger } from '@/types/schultraeger'
 
@@ -20,6 +21,7 @@ import type { Schultraeger } from '@/types/schultraeger'
 const props = defineProps<{ schultraegerId: string; schuleId: string }>()
 
 const route = useRoute()
+const router = useRouter()
 const schuleStore = useSchuleStore()
 const schultraegerStore = useSchultraegerStore()
 const schemaStore = useSchemaStore()
@@ -35,7 +37,11 @@ onMounted(async () => {
   schuleName.value = geladeneSchule.value.name
   geladenerSchultraeger.value = await schultraegerStore.get(props.schultraegerId)
   svwsInstanzStore.size = 100
-  await Promise.all([svwsInstanzStore.fetchList({ page: 0 }), schemaUmgebungStore.fetchList()])
+  await Promise.all([
+    svwsInstanzStore.fetchList({ page: 0 }),
+    schemaUmgebungStore.fetchList(),
+    schemaStore.fetchList(props.schultraegerId, props.schuleId),
+  ])
 
   // Direkt aus "Neue Schule anlegen" (Schuldatenbanken-Übersicht) kommend: die SVWS-Instanz für
   // die erste Schuldatenbank muss unmittelbar wählbar sein, statt in einem separaten Klick.
@@ -144,12 +150,72 @@ async function schemaAbsenden(): Promise<void> {
   }
 }
 
+function instanzName(instanzId: string): string {
+  return svwsInstanzStore.items.find((instanz) => instanz.id === instanzId)?.name ?? instanzId
+}
+
+// --- Operation "Echtes Schema über die SVWS-Instanz löschen" ---------------------------------
+// Unwiderruflich (ADR-014, POST /api/schema/root/destroy/{schema}) - deshalb zusätzlich zur
+// Warnung eine Bestätigung durch Eintippen des Schemanamens statt nur eines Klicks.
+const schemaLoeschenModalOffen = ref(false)
+const zuLoeschendesSchema = ref<Schema | null>(null)
+const schemaLoeschenBestaetigungstext = ref('')
+const schemaLoeschenLaeuft = ref(false)
+const schemaLoeschenFehler = ref<string | null>(null)
+
+function schemaLoeschenOeffnen(schema: Schema): void {
+  zuLoeschendesSchema.value = schema
+  schemaLoeschenBestaetigungstext.value = ''
+  schemaLoeschenFehler.value = null
+  schemaLoeschenModalOffen.value = true
+}
+
+function schemaLoeschenSchliessen(): void {
+  schemaLoeschenModalOffen.value = false
+}
+
+async function schemaLoeschenBestaetigen(): Promise<void> {
+  if (!zuLoeschendesSchema.value) return
+  schemaLoeschenFehler.value = null
+  schemaLoeschenLaeuft.value = true
+  try {
+    const ergebnis = await schemaStore.destroy(props.schultraegerId, props.schuleId, zuLoeschendesSchema.value.id)
+    if (ergebnis.success) {
+      schemaLoeschenModalOffen.value = false
+    } else {
+      schemaLoeschenFehler.value = ergebnis.message ?? 'Löschen fehlgeschlagen.'
+    }
+  } catch (error) {
+    schemaLoeschenFehler.value = error instanceof ApiError ? error.message : 'Löschen fehlgeschlagen.'
+  } finally {
+    schemaLoeschenLaeuft.value = false
+  }
+}
+
 // --- Operation "Schule deaktivieren" --------------------------------------------------------
 const deaktivierenBestaetigen = ref(false)
 
 async function bestaetigenSchuleDeaktivieren(): Promise<void> {
   geladeneSchule.value = await schuleStore.deactivate(props.schultraegerId, props.schuleId)
   deaktivierenBestaetigen.value = false
+}
+
+// --- Operation "Schule endgültig löschen" -----------------------------------------------------
+// Blockiert serverseitig, solange noch echte Schuldatenbanken existieren (siehe Schema-Liste
+// oben) - hier reicht daher ein normaler Bestätigungsdialog, analog zum harten Löschen von
+// Schulträgern.
+const loeschenBestaetigen = ref(false)
+const loeschenFehler = ref<string | null>(null)
+
+async function bestaetigenSchuleLoeschen(): Promise<void> {
+  loeschenFehler.value = null
+  loeschenBestaetigen.value = false
+  try {
+    await schuleStore.deleteEndgueltig(props.schultraegerId, props.schuleId)
+    await router.push({ name: 'schuldatenbank-uebersicht' })
+  } catch (error) {
+    loeschenFehler.value = error instanceof ApiError ? error.message : 'Löschen fehlgeschlagen.'
+  }
 }
 </script>
 
@@ -221,9 +287,66 @@ async function bestaetigenSchuleDeaktivieren(): Promise<void> {
           </p>
           <button type="button" class="danger" @click="deaktivierenBestaetigen = true">Deaktivieren</button>
         </article>
+
+        <article class="operation-karte gefahr">
+          <h3>Schule endgültig löschen</h3>
+          <p>
+            Nur möglich, solange keine echten Schuldatenbanken mehr auf einer SVWS-Instanz existieren (siehe unten).
+            Diese Aktion kann nicht rückgängig gemacht werden.
+          </p>
+          <p v-if="loeschenFehler" role="alert" class="fehler">{{ loeschenFehler }}</p>
+          <button type="button" class="danger" @click="loeschenBestaetigen = true">Endgültig löschen</button>
+        </article>
       </div>
 
       <p class="hinweis-klein">Weitere Operationen (z. B. Zertifikatsverwaltung, Credential-Rotation) folgen später.</p>
+    </section>
+
+    <section class="schemata">
+      <h2>Schuldatenbanken</h2>
+
+      <p v-if="schemaStore.errorMessage" role="alert" class="fehler">{{ schemaStore.errorMessage }}</p>
+      <p v-else-if="schemaStore.loading">Lädt …</p>
+
+      <div v-else class="table-wrap">
+        <table>
+          <caption class="sr-only">
+            Liste der Schuldatenbanken dieser Schule
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Schemaname</th>
+              <th scope="col">Umgebung</th>
+              <th scope="col">Status</th>
+              <th scope="col">Herkunft</th>
+              <th scope="col">SVWS-Instanz</th>
+              <th scope="col">Aktionen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="schema in schemaStore.items" :key="schema.id">
+              <td>{{ schema.schemaName }}</td>
+              <td>{{ schema.umgebung }}</td>
+              <td>
+                <span :class="['status', `status-${schema.status.toLowerCase()}`]">{{ schema.status }}</span>
+              </td>
+              <td>{{ schema.source === 'SYNCHRONISIERT' ? 'Synchronisiert' : 'Manuell' }}</td>
+              <td>{{ instanzName(schema.instanzId) }}</td>
+              <td class="aktionen-zelle">
+                <span v-if="schema.status === 'GEPLANT'" class="hinweis-klein">
+                  Nur vorbereitet, noch nicht real angelegt.
+                </span>
+                <button v-else type="button" class="danger btn-klein" @click="schemaLoeschenOeffnen(schema)">
+                  Über SVWS-Instanz löschen
+                </button>
+              </td>
+            </tr>
+            <tr v-if="schemaStore.items.length === 0">
+              <td colspan="6">Keine Schuldatenbanken erfasst.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <Modal :open="schuleBearbeitenModalOffen" titel="Schule bearbeiten" @close="schuleBearbeitenSchliessen">
@@ -304,6 +427,50 @@ async function bestaetigenSchuleDeaktivieren(): Promise<void> {
       @confirm="bestaetigenSchuleDeaktivieren"
       @cancel="deaktivierenBestaetigen = false"
     />
+
+    <ConfirmDialog
+      :open="loeschenBestaetigen"
+      titel="Schule endgültig löschen"
+      :nachricht="`Soll '${geladeneSchule?.name}' unwiderruflich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden.`"
+      bestaetigen-text="Endgültig löschen"
+      @confirm="bestaetigenSchuleLoeschen"
+      @cancel="loeschenBestaetigen = false"
+    />
+
+    <Modal
+      :open="schemaLoeschenModalOffen"
+      titel="Schema über die SVWS-Instanz löschen"
+      @close="schemaLoeschenSchliessen"
+    >
+      <p role="alert" class="fehler-warnung">
+        Achtung: Dies löscht das Schema <strong>{{ zuLoeschendesSchema?.schemaName }}</strong> unwiderruflich auf der
+        SVWS-Instanz <strong>{{ zuLoeschendesSchema ? instanzName(zuLoeschendesSchema.instanzId) : '' }}</strong
+        >. Stellen Sie vorher unbedingt sicher, dass ein aktuelles Backup dieser Schuldatenbank vorhanden ist - diese
+        Aktion kann nicht rückgängig gemacht werden.
+      </p>
+
+      <p v-if="schemaLoeschenFehler" role="alert" class="fehler">{{ schemaLoeschenFehler }}</p>
+
+      <form @submit.prevent="schemaLoeschenBestaetigen">
+        <div class="feld">
+          <label for="schema-loeschen-bestaetigung">
+            Zur Bestätigung bitte den Schemanamen "{{ zuLoeschendesSchema?.schemaName }}" eingeben
+          </label>
+          <input id="schema-loeschen-bestaetigung" v-model="schemaLoeschenBestaetigungstext" type="text" required />
+        </div>
+
+        <div class="aktionen">
+          <button
+            type="submit"
+            class="danger"
+            :disabled="schemaLoeschenLaeuft || schemaLoeschenBestaetigungstext !== zuLoeschendesSchema?.schemaName"
+          >
+            Endgültig löschen
+          </button>
+          <button type="button" class="button-secondary" @click="schemaLoeschenSchliessen">Abbrechen</button>
+        </div>
+      </form>
+    </Modal>
   </main>
 </template>
 
@@ -463,8 +630,15 @@ main {
   color: var(--accent);
 }
 
-.status-inaktiv {
+.status-inaktiv,
+.status-geplant,
+.status-archiviert {
   color: var(--ink-soft);
+}
+
+.status-fehler,
+.status-migration_erforderlich {
+  color: var(--error);
 }
 
 .hinweis-klein {
@@ -474,5 +648,89 @@ main {
 
 .fehler {
   color: var(--error);
+}
+
+.fehler-warnung {
+  color: var(--error);
+  border: 1px solid var(--error);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.schemata {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.table-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+
+.table-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.table-wrap::-webkit-scrollbar-thumb {
+  background-color: var(--line);
+  border-radius: 999px;
+}
+
+.table-wrap::-webkit-scrollbar-thumb:hover {
+  background-color: var(--accent);
+}
+
+table {
+  width: 100%;
+  min-width: 50rem;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+  line-height: 1.3;
+}
+
+thead th {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-soft);
+  background: var(--surface-strong);
+}
+
+tbody tr:hover {
+  background: var(--surface-strong);
+}
+
+.aktionen-zelle {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 </style>

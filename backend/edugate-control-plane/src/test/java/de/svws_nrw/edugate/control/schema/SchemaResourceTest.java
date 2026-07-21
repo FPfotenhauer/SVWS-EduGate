@@ -4,8 +4,13 @@ import static io.restassured.RestAssured.given;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 import de.svws_nrw.edugate.control.support.PostgresTestResource;
+import de.svws_nrw.edugate.core.svws.SvwsPrivilegedApiClient;
+import de.svws_nrw.edugate.core.svws.SvwsSchemaDestroyResult;
+import io.quarkus.test.InjectMock;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
@@ -29,6 +34,9 @@ class SchemaResourceTest {
     private static final String SCHULTRAEGER_PATH = "/admin/api/v1/schultraeger";
     private static final String SVWS_INSTANZ_PATH = "/admin/api/v1/svws-instanzen";
     private static final String ADMIN_USER = "admin@edugate.local";
+
+    @InjectMock
+    SvwsPrivilegedApiClient privilegedApiClient;
 
     @Test
     void ohneTokenGibtEs401AlsProblemJson() {
@@ -271,6 +279,125 @@ class SchemaResourceTest {
             .statusCode(200)
             .body("size()", equalTo(1))
             .body("[0].id", equalTo(schemaId));
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void destroyGeplantesSchemaErgibt409UndBleibtErhalten() {
+        final String schultraegerId = neuenSchultraegerAnlegen();
+        final String schuleId = neueSchuleAnlegen(schultraegerId, "777771", "Schule Sieben A");
+        final String instanzId = neueSvwsInstanzAnlegen();
+        final String path = schemataPath(schultraegerId, schuleId);
+
+        final String createBody = "{\"instanzId\": \"" + instanzId + "\", \"schemaName\": \"777771\", \"umgebung\": \"TEST\"}";
+        final String id = given().contentType(ContentType.JSON).body(createBody).when().post(path)
+            .then().statusCode(201).extract().path("id");
+
+        given()
+            .when().post(path + "/" + id + "/loeschen-auf-instanz")
+            .then()
+            .statusCode(409)
+            .contentType("application/problem+json");
+
+        given().when().get(path).then().statusCode(200).body("size()", equalTo(1));
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void destroyOhneZugangsdatenLiefertKontrolliertenFehlschlagUndAuditSuccess() {
+        final String schultraegerId = neuenSchultraegerAnlegen();
+        final String schuleId = neueSchuleAnlegen(schultraegerId, "777772", "Schule Sieben B");
+        final String instanzId = neueSvwsInstanzAnlegen();
+        final String path = schemataPath(schultraegerId, schuleId);
+        final String id = echtesSchemaAnlegen(schultraegerId, schuleId, instanzId, "777772");
+
+        given()
+            .when().post(path + "/" + id + "/loeschen-auf-instanz")
+            .then()
+            .statusCode(200)
+            .body("success", equalTo(false))
+            .body("message", org.hamcrest.Matchers.containsString("Zugangsdaten"));
+
+        given().when().get(path).then().statusCode(200).body("size()", equalTo(1));
+        assertThat(auditOutcomesFor(UUID.fromString(id), "SCHEMA_DESTROY")).containsExactly("SUCCESS");
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void destroyMitErfolgreichemApiAufrufEntferntLokaleZeile() {
+        final String schultraegerId = neuenSchultraegerAnlegen();
+        final String schuleId = neueSchuleAnlegen(schultraegerId, "777773", "Schule Sieben C");
+        final String instanzId = neueSvwsInstanzAnlegen();
+        zugangsdatenSetzen(instanzId);
+        final String path = schemataPath(schultraegerId, schuleId);
+        final String id = echtesSchemaAnlegen(schultraegerId, schuleId, instanzId, "777773");
+
+        when(privilegedApiClient.destroySchema(any(), any(), any(), any())).thenReturn(SvwsSchemaDestroyResult.erfolgreich());
+
+        given()
+            .when().post(path + "/" + id + "/loeschen-auf-instanz")
+            .then()
+            .statusCode(200)
+            .body("success", equalTo(true));
+
+        given().when().get(path).then().statusCode(200).body("size()", equalTo(0));
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void destroyMitFehlschlagDerPrivilegedApiBelaesstLokaleZeile() {
+        final String schultraegerId = neuenSchultraegerAnlegen();
+        final String schuleId = neueSchuleAnlegen(schultraegerId, "777774", "Schule Sieben D");
+        final String instanzId = neueSvwsInstanzAnlegen();
+        zugangsdatenSetzen(instanzId);
+        final String path = schemataPath(schultraegerId, schuleId);
+        final String id = echtesSchemaAnlegen(schultraegerId, schuleId, instanzId, "777774");
+
+        when(privilegedApiClient.destroySchema(any(), any(), any(), any()))
+            .thenReturn(SvwsSchemaDestroyResult.failure("Das Schema darf nicht gelöscht werden."));
+
+        given()
+            .when().post(path + "/" + id + "/loeschen-auf-instanz")
+            .then()
+            .statusCode(200)
+            .body("success", equalTo(false))
+            .body("message", org.hamcrest.Matchers.containsString("darf nicht gelöscht werden"));
+
+        given().when().get(path).then().statusCode(200).body("size()", equalTo(1));
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void destroyUnbekanntesSchemaErgibt404() {
+        final String schultraegerId = neuenSchultraegerAnlegen();
+        final String schuleId = neueSchuleAnlegen(schultraegerId, "777775", "Schule Sieben E");
+
+        given()
+            .when().post(schemataPath(schultraegerId, schuleId) + "/" + UUID.randomUUID() + "/loeschen-auf-instanz")
+            .then()
+            .statusCode(404)
+            .contentType("application/problem+json");
+    }
+
+    /** Legt ein Schema an und hebt es per Update auf einen "echten" Status (ungleich GEPLANT). */
+    static String echtesSchemaAnlegen(final String schultraegerId, final String schuleId, final String instanzId,
+            final String schemaName) {
+        final String path = schemataPath(schultraegerId, schuleId);
+        final String createBody = "{\"instanzId\": \"" + instanzId + "\", \"schemaName\": \"" + schemaName + "\", "
+            + "\"umgebung\": \"TEST\"}";
+        final String id = given().contentType(ContentType.JSON).body(createBody).when().post(path)
+            .then().statusCode(201).extract().path("id");
+
+        final String updateBody = "{\"instanzId\": \"" + instanzId + "\", \"schemaName\": \"" + schemaName + "\", "
+            + "\"umgebung\": \"TEST\", \"status\": \"AKTIV\", \"aktiv\": true}";
+        given().contentType(ContentType.JSON).body(updateBody).when().put(path + "/" + id).then().statusCode(200);
+        return id;
+    }
+
+    static void zugangsdatenSetzen(final String instanzId) {
+        final String body = "{\"username\": \"svws-admin\", \"password\": \"geheim\"}";
+        given().contentType(ContentType.JSON).body(body).when().put(SVWS_INSTANZ_PATH + "/" + instanzId + "/credentials")
+            .then().statusCode(204);
     }
 
     static String schemataPath(final String schultraegerId, final String schuleId) {

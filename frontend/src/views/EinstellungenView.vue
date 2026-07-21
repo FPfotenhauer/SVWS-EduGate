@@ -8,6 +8,11 @@ import { RouterLink } from 'vue-router'
     <p class="hinweis">Betreiber-Einstellungen für SVWS-EduGate.</p>
 
     <div class="kacheln">
+      <RouterLink :to="{ name: 'schuldatei' }" class="kachel">
+        <h2>Schuldatei</h2>
+        <p>Amtliche Landes-Schuldatei als Referenzkatalog: Schulen und Schulträger einsehen, suchen und abgleichen.</p>
+      </RouterLink>
+
       <RouterLink :to="{ name: 'schema-umgebungen' }" class="kachel">
         <h2>Umgebungen verwalten</h2>
         <p>Namenskonvention für Schuldatenbanken: Produktiv, Test, Schulung und weitere Umgebungen pflegen.</p>

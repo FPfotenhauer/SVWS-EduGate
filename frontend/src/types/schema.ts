@@ -44,3 +44,13 @@ export interface SchemaNamingSuggestion {
   schemaName: string | null
   belastbareSchulnummer: boolean
 }
+
+/**
+ * Ergebnis eines Löschversuchs eines echten Schemas über die SVWS-Privileged-API. Ein
+ * fachlicher Fehlschlag (fehlende Zugangsdaten, SVWS-seitige Ablehnung, Netzwerkfehler) ist kein
+ * HTTP-Fehler - die Anfrage liefert 200 mit success=false und einer erklärenden message.
+ */
+export interface SchemaDestroyResult {
+  success: boolean
+  message: string | null
+}

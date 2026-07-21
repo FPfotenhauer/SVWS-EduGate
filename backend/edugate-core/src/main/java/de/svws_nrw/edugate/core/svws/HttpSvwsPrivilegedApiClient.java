@@ -39,6 +39,7 @@ public final class HttpSvwsPrivilegedApiClient implements SvwsPrivilegedApiClien
 
     private static final String SCHEMA_LISTE_SVWS_PATH = "/api/schema/liste/svws";
     private static final String SCHUL_INFO_PATH_TEMPLATE = "/api/schema/liste/info/%s/schule";
+    private static final String DESTROY_PATH_TEMPLATE = "/api/schema/root/destroy/%s";
 
     private final HttpClient httpClient;
     private final Duration requestTimeout;
@@ -140,6 +141,43 @@ public final class HttpSvwsPrivilegedApiClient implements SvwsPrivilegedApiClien
             }
             return SvwsSchulInfoResult.failure("SVWS-Instanz antwortete mit Status " + status + ".");
         }, SvwsSchulInfoResult::failure);
+    }
+
+    @Override
+    public SvwsSchemaDestroyResult destroySchema(final String baseUrl, final String username, final String password,
+            final String schemaName) {
+        final URI uri;
+        final HttpRequest.Builder requestBuilder;
+        try {
+            final String encodedSchema = URLEncoder.encode(schemaName, StandardCharsets.UTF_8).replace("+", "%20");
+            uri = URI.create(stripTrailingSlash(baseUrl) + String.format(DESTROY_PATH_TEMPLATE, encodedSchema));
+            requestBuilder = HttpRequest.newBuilder(uri).header("Authorization", basicAuthHeader(username, password))
+                .POST(HttpRequest.BodyPublishers.noBody());
+        } catch (final IllegalArgumentException e) {
+            return SvwsSchemaDestroyResult.failure("Die Base-URL ist technisch ungültig.");
+        }
+
+        final String host = uri.getHost();
+        if (host == null || !targetGuard.isAllowed(host)) {
+            return SvwsSchemaDestroyResult.failure("Zielhost ist für diese Operation nicht zugelassen.");
+        }
+
+        return send(requestBuilder, response -> {
+            final int status = response.statusCode();
+            if (status == 204) {
+                return SvwsSchemaDestroyResult.erfolgreich();
+            }
+            if (status == 403) {
+                return SvwsSchemaDestroyResult.failure("Das Schema darf nicht gelöscht werden.");
+            }
+            if (status == 404) {
+                return SvwsSchemaDestroyResult.failure("Das angegebene Schema wurde auf der SVWS-Instanz nicht gefunden.");
+            }
+            if (status == 401) {
+                return SvwsSchemaDestroyResult.failure("Zugangsdaten ungültig oder ohne privilegierten Zugriff.");
+            }
+            return SvwsSchemaDestroyResult.failure("SVWS-Instanz antwortete mit Status " + status + ".");
+        }, SvwsSchemaDestroyResult::failure);
     }
 
     private SvwsSchemaListResult parseEntries(final String body) {

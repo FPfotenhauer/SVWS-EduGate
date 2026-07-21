@@ -37,3 +37,12 @@ export function deactivateSchule(
 ): Promise<Schule> {
   return apiRequest<Schule>(`${basePath(schultraegerId)}/${id}`, { method: 'DELETE', getAccessToken })
 }
+
+/** Endgültiges Löschen (im Unterschied zu deactivateSchule): blockiert bei echten Schuldatenbanken. */
+export function deleteSchuleEndgueltig(
+  schultraegerId: string,
+  id: string,
+  getAccessToken: AccessTokenProvider,
+): Promise<void> {
+  return apiRequest<void>(`${basePath(schultraegerId)}/${id}/endgueltig`, { method: 'DELETE', getAccessToken })
+}

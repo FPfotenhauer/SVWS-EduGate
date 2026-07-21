@@ -83,6 +83,13 @@ public class SchultraegerResource {
         return service.reactivate(adminSubject(), id);
     }
 
+    @DELETE
+    @Path("/{id}/endgueltig")
+    public Response delete(@PathParam("id") final UUID id) {
+        service.delete(adminSubject(), id);
+        return Response.noContent().build();
+    }
+
     private String adminSubject() {
         return securityIdentity.getPrincipal().getName();
     }

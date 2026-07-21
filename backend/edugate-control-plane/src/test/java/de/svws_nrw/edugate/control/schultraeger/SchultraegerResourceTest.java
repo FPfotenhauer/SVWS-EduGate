@@ -247,4 +247,222 @@ class SchultraegerResourceTest {
             .statusCode(409)
             .contentType("application/problem+json");
     }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void ohneKatalogIdUndSonderfallIstDieQuelleManuell() {
+        final String traegernummer = "MAN-" + UUID.randomUUID();
+        final String body = "{\"name\": \"Musterstadt\", \"traegernummer\": \"" + traegernummer + "\"}";
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(body)
+            .when().post(PATH)
+            .then()
+            .statusCode(201)
+            .body("quelle", equalTo("MANUELL"))
+            .body("katalogId", equalTo(null))
+            .body("sonderfallHinweis", equalTo(null));
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void sonderfallSetztQuelleUndSpeichertDenHinweis() {
+        final String traegernummer = "SON-" + UUID.randomUUID();
+        final String body = "{\"name\": \"Sondertraeger\", \"traegernummer\": \"" + traegernummer + "\", "
+            + "\"sonderfall\": true, \"sonderfallHinweis\": \"Kein Eintrag in der Schuldatei, Neugründung\"}";
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(body)
+            .when().post(PATH)
+            .then()
+            .statusCode(201)
+            .body("quelle", equalTo("SONDERFALL"))
+            .body("katalogId", equalTo(null))
+            .body("sonderfallHinweis", equalTo("Kein Eintrag in der Schuldatei, Neugründung"));
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void katalogIdSetztQuelleLandeslisteUndUeberschreibtSonderfall() {
+        final UUID katalogId = insertKatalogEintrag("KAT-" + UUID.randomUUID(), "Katalogträger");
+        final String traegernummer = "LL-" + UUID.randomUUID();
+        final String body = "{\"name\": \"Katalogträger\", \"traegernummer\": \"" + traegernummer + "\", "
+            + "\"katalogId\": \"" + katalogId + "\", \"sonderfall\": true, \"sonderfallHinweis\": \"wird ignoriert\"}";
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(body)
+            .when().post(PATH)
+            .then()
+            .statusCode(201)
+            .body("quelle", equalTo("LANDESLISTE"))
+            .body("katalogId", equalTo(katalogId.toString()))
+            .body("sonderfallHinweis", equalTo(null));
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void unbekannteKatalogIdErgibt404() {
+        final String traegernummer = "UNK-" + UUID.randomUUID();
+        final String body = "{\"name\": \"Musterstadt\", \"traegernummer\": \"" + traegernummer + "\", "
+            + "\"katalogId\": \"" + UUID.randomUUID() + "\"}";
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(body)
+            .when().post(PATH)
+            .then()
+            .statusCode(404)
+            .contentType("application/problem+json");
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void endgueltigesLoeschenEntferntManuellenSchultraegerOhneSchulen() {
+        final String traegernummer = "DEL-" + UUID.randomUUID();
+        final String body = "{\"name\": \"Zu löschen\", \"traegernummer\": \"" + traegernummer + "\"}";
+        final String id = given().contentType(ContentType.JSON).body(body).when().post(PATH)
+            .then().statusCode(201).extract().path("id");
+
+        given()
+            .when().delete(PATH + "/" + id + "/endgueltig")
+            .then()
+            .statusCode(204);
+
+        given().when().get(PATH + "/" + id).then().statusCode(404);
+        assertThat(auditOutcomesFor(UUID.fromString(id), "SCHULTRAEGER_DELETE")).containsExactly("SUCCESS");
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void endgueltigesLoeschenEntferntAuchSonderfallSchultraeger() {
+        final String traegernummer = "DELSON-" + UUID.randomUUID();
+        final String body = "{\"name\": \"Sonderfall\", \"traegernummer\": \"" + traegernummer + "\", "
+            + "\"sonderfall\": true, \"sonderfallHinweis\": \"Testfall\"}";
+        final String id = given().contentType(ContentType.JSON).body(body).when().post(PATH)
+            .then().statusCode(201).extract().path("id");
+
+        given().when().delete(PATH + "/" + id + "/endgueltig").then().statusCode(204);
+        given().when().get(PATH + "/" + id).then().statusCode(404);
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void endgueltigesLoeschenEntferntAuchAbhaengigeAnsprechpartner() {
+        final String traegernummer = "DELAP-" + UUID.randomUUID();
+        final String body = "{\"name\": \"Mit Ansprechpartner\", \"traegernummer\": \"" + traegernummer + "\"}";
+        final String id = given().contentType(ContentType.JSON).body(body).when().post(PATH)
+            .then().statusCode(201).extract().path("id");
+        insertAnsprechpartner(UUID.fromString(id));
+
+        given().when().delete(PATH + "/" + id + "/endgueltig").then().statusCode(204);
+
+        assertThat(countAnsprechpartner(UUID.fromString(id))).isZero();
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void endgueltigesLoeschenBlockiertBeiVorhandenenSchulen() {
+        final String traegernummer = "DELSCH-" + UUID.randomUUID();
+        final String body = "{\"name\": \"Mit Schule\", \"traegernummer\": \"" + traegernummer + "\"}";
+        final String id = given().contentType(ContentType.JSON).body(body).when().post(PATH)
+            .then().statusCode(201).extract().path("id");
+        insertSchule(UUID.fromString(id));
+
+        given()
+            .when().delete(PATH + "/" + id + "/endgueltig")
+            .then()
+            .statusCode(409)
+            .contentType("application/problem+json")
+            .body("detail", org.hamcrest.Matchers.containsString("1 Schule"));
+
+        given().when().get(PATH + "/" + id).then().statusCode(200);
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void endgueltigesLoeschenBlockiertBeiLandeslistenSchultraeger() {
+        final UUID katalogId = insertKatalogEintrag("LLDEL-" + UUID.randomUUID(), "Landeslisten-Träger");
+        final String traegernummer = "DELLL-" + UUID.randomUUID();
+        final String body = "{\"name\": \"Landeslisten-Träger\", \"traegernummer\": \"" + traegernummer + "\", "
+            + "\"katalogId\": \"" + katalogId + "\"}";
+        final String id = given().contentType(ContentType.JSON).body(body).when().post(PATH)
+            .then().statusCode(201).extract().path("id");
+
+        given()
+            .when().delete(PATH + "/" + id + "/endgueltig")
+            .then()
+            .statusCode(409)
+            .contentType("application/problem+json");
+
+        given().when().get(PATH + "/" + id).then().statusCode(200);
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void endgueltigesLoeschenUnbekannterIdErgibt404() {
+        given()
+            .when().delete(PATH + "/" + UUID.randomUUID() + "/endgueltig")
+            .then()
+            .statusCode(404)
+            .contentType("application/problem+json");
+    }
+
+    private void insertSchule(final UUID tenantId) {
+        try (Connection connection = PostgresTestResource.openAdminConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                 "INSERT INTO schule (tenant_id, schulnummer, name) VALUES (?, ?, ?)")) {
+            statement.setObject(1, tenantId);
+            statement.setString(2, "SCH-" + UUID.randomUUID());
+            statement.setString(3, "Testschule");
+            statement.executeUpdate();
+        } catch (final Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void insertAnsprechpartner(final UUID tenantId) {
+        try (Connection connection = PostgresTestResource.openAdminConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                 "INSERT INTO ansprechpartner (tenant_id, name, vorname) VALUES (?, ?, ?)")) {
+            statement.setObject(1, tenantId);
+            statement.setString(2, "Muster");
+            statement.setString(3, "Max");
+            statement.executeUpdate();
+        } catch (final Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private long countAnsprechpartner(final UUID tenantId) {
+        try (Connection connection = PostgresTestResource.openAdminConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                 "SELECT count(*) FROM ansprechpartner WHERE tenant_id = ?")) {
+            statement.setObject(1, tenantId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return resultSet.getLong(1);
+            }
+        } catch (final Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private UUID insertKatalogEintrag(final String traegernummer, final String traegername) {
+        try (Connection connection = PostgresTestResource.openAdminConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                 "INSERT INTO schultraeger_katalog (bundeslandkennung, traegernummer, traegername) "
+                     + "VALUES ('NRW', ?, ?) RETURNING id")) {
+            statement.setString(1, traegernummer);
+            statement.setString(2, traegername);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return (UUID) resultSet.getObject("id");
+            }
+        } catch (final Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 }

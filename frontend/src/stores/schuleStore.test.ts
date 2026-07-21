@@ -109,4 +109,15 @@ describe('schuleStore', () => {
     expect(listSpy).toHaveBeenCalledWith(SCHULTRAEGER_ID, expect.any(Function))
     expect(result).toEqual(deaktivierteSchule)
   })
+
+  it('deleteEndgueltig ruft die API mit Schulträger-ID und Schul-ID auf und lädt die Liste danach neu', async () => {
+    const deleteSpy = vi.spyOn(schuleApi, 'deleteSchuleEndgueltig').mockResolvedValue(undefined)
+    const listSpy = vi.spyOn(schuleApi, 'listSchulen').mockResolvedValue([])
+
+    const store = useSchuleStore()
+    await store.deleteEndgueltig(SCHULTRAEGER_ID, beispielSchule.id)
+
+    expect(deleteSpy).toHaveBeenCalledWith(SCHULTRAEGER_ID, beispielSchule.id, expect.any(Function))
+    expect(listSpy).toHaveBeenCalledWith(SCHULTRAEGER_ID, expect.any(Function))
+  })
 })

@@ -1,6 +1,6 @@
 # ADR-020: Schulen als Stammdaten vor Schuldatenbanken
 
-- **Status:** proposed
+- **Status:** accepted
 - **Datum:** 2026-07-21
 - **Entscheider:** Franko Pfotenhauer
 
@@ -208,12 +208,106 @@ automatische Tenant- oder Schulzuordnung auslösen.
 
 ### Offene Punkte
 
-- Konkrete technische Anbindung der offiziellen Landes-API: Authentifizierung, Rate Limits,
-  Datenformat, Aktualisierungsintervall und Fehlerstrategie.
-- Exakte Feldliste des Katalogs nach Sichtung der API.
 - Migrationspfad für bestehende EduGate-Schulen und Schemata.
-- Detailentscheidung, ob Sonderfall-Schulträger ebenfalls einen eigenen Katalog bekommen oder
-  zunächst nur als operative Schulträger ohne Katalogverweis geführt werden.
+- ~~Konkrete technische Anbindung der offiziellen Landes-API~~, ~~exakte Feldliste des
+  Katalogs~~ und ~~Detailentscheidung zum Schulträger-Katalog~~: geklärt, siehe Nachtrag
+  „Grundlagenrecherche vor Umsetzung" unten.
+
+## Nachtrag (Grundlagenrecherche vor Umsetzung): Schulträger-Katalog, Sonderfall-Symmetrie, Feldliste
+
+Vor Beginn der Umsetzung (Kachel „Schuldatei", GitHub-Issue #28) wurden die realen NRW-Endpunkte
+(`.../export/json/konten`, `.../export/json/katalog`) inspiziert sowie die bereits vorhandene
+Implementierung im Projekt `SVWS-Main-Server` (`de.schultraeger.*`) gesichtet. Das klärt die zuvor
+offenen Punkte dieses ADRs.
+
+### Technischer Befund
+
+- `konten` liefert 8.635 `organisationseinheit`-Datensätze mit Unterscheidungsfeld `oeart`.
+  Relevant für EduGate: `oeart=1` → Schule (5.703 Datensätze), `oeart=2` → Schulträger (1.426
+  Datensätze). Schulträger sind damit **vollwertige, eigenständige Organisationseinheiten** mit
+  eigener Adresse und eigenem Gültigkeitszeitraum, strukturell gleichwertig zu Schulen – kein
+  bloßes Unterfeld einer Schule. Die übrigen 13 `oeart`-Werte (Schulaufsichtsbehörde,
+  Studienseminare, Testschulen, Kompetenzteams usw.) sind für EduGate nicht relevant und werden
+  beim Import verworfen.
+- Jede Schule referenziert ihren Träger eindeutig über `grunddaten.schultraegernummer`, das exakt
+  auf das Feld `schulnummer` des zugehörigen `oeart=2`-Datensatzes verweist (stichprobenartig zu
+  100 % verifiziert).
+- `katalog` liefert Code-Kataloge zur Übersetzung von Kürzeln, u. a. `OrganisationseinheitArt`
+  (löst `oeart` auf) und `Traeger` (löst die **Trägerschaftsart** auf, z. B. „kreisfreie Stadt",
+  „Erzbistum" – keine Liste konkreter, benannter Schulträger-Organisationen).
+- `SVWS-Main-Server` filtert aktuell **nicht** nach `oeart`: Jeder `organisationseinheit`-Datensatz
+  mit gesetzter `schulnummer` landet undifferenziert in einer flachen `nrw_schulkatalog`-Tabelle –
+  Schulen, Schulträger und Schulaufsichtsbehörden vermischt. Zusätzlich ersetzt der
+  Refresh-Vorgang dort bei jedem Lauf die komplette Tabelle (`clearAll()` + `saveAll()`) und
+  vergibt je Zeile eine neue zufällige UUID. EduGate übernimmt aus dieser Implementierung nur das
+  Datenquellen-Wissen (Endpunkte, Feldnamen, Join-Schlüssel), nicht die Tabellen- oder
+  Refresh-Struktur.
+
+### Entscheidung
+
+**1. Eigener `schultraeger_katalog`, symmetrisch zu `schule_katalog`.** Da Schulträger in der
+Quelle vollwertige, eigenständige Organisationseinheiten sind, führt EduGate einen eigenen
+Referenzkatalog `schultraeger_katalog` (befüllt aus `oeart=2`) neben `schule_katalog` (befüllt aus
+`oeart=1`) ein, statt Trägerdaten nur denormalisiert in `schule_katalog` mitzuführen.
+`schule_katalog.schultraegernummer` bleibt die fachliche Verknüpfung zu
+`schultraeger_katalog.traegernummer` – bewusst ohne erzwingende Fremdschlüssel-Constraint, damit
+eine Schule auch importierbar bleibt, falls der zugehörige Trägerdatensatz zum Importzeitpunkt
+fehlt oder verworfen wurde.
+
+**2. Sonderfall-/Herkunftsfelder gelten symmetrisch für `schultraeger` und `schule`.** Die
+operative Tabelle `schultraeger` erhält dieselben Felder, die dieses ADR für `schule` vorsieht:
+optionaler `katalog_id`-Verweis, `quelle: LANDESLISTE | MANUELL | SONDERFALL`,
+`sonderfall_hinweis`. Sonderfall-Schulträger (z. B. Träger, die in der Landesliste nicht passend
+vorhanden sind) werden damit genauso auditierbar erfasst wie Sonderfall-Schulen.
+
+**3. Stabile Identität von Katalogeinträgen über Refreshs hinweg.** Anders als in
+`SVWS-Main-Server` (kompletter Tabellen-Neuaufbau mit zufälligen UUIDs je Refresh) müssen
+`schule_katalog`- und `schultraeger_katalog`-Zeilen über mehrere Refreshs hinweg dieselbe Identität
+behalten, weil operative Datensätze über `katalog_id` auf sie verweisen können. Der Import
+arbeitet daher als Upsert über den fachlichen Schlüssel (`bundeslandkennung` + Quellen-`schulnummer`
+bzw. -`traegernummer`), nicht als Clear-and-Insert. Datensätze, die ein Refresh nicht mehr liefert,
+werden nicht gelöscht, sondern als nicht mehr aktuell markiert (Abgleich mit `aufloesung` bzw.
+einem `zuletzt_gesehen_am`-Zeitstempel), damit bestehende `katalog_id`-Verweise nicht ins Leere
+laufen.
+
+**4. Refresh bleibt eine geschützte, auditierte Operator-Aktion.** Anders als der öffentliche
+(`@PermitAll`) Refresh-Endpunkt in `SVWS-Main-Server` läuft der EduGate-Refresh über
+`OperatorAccess` (ADR-009), ausgelöst über die Schuldatei-Kachel – kein automatisiert-öffentlicher
+Zugriff.
+
+### Konkretisierte Feldliste
+
+`schule_katalog` (aus `oeart=1`):
+
+```text
+bundeslandkennung, schulnummer (Quellen-ID)
+schulname (grunddaten.kurzbezeichnung)
+schultraegernummer (Verknüpfung zu schultraeger_katalog.traegernummer)
+schulform/-art (grunddaten.schulform, ggf. mehrere zeitlich gültige Einträge)
+strasse, plz, ort (aktuell gültige Hauptstandortadresse aus adressen)
+kreis (adressen.regionalschluessel, erste 5 Stellen)
+telefon, fax, email, homepage (aus erreichbarkeiten, soweit vorhanden)
+aufloesung ("31.12.9999" = aktuell aktiv)
+zuletzt_gesehen_am, quellen_stand (Importzeitpunkt/-version)
+```
+
+`schultraeger_katalog` (aus `oeart=2`, gleiches Grundmuster):
+
+```text
+bundeslandkennung, traegernummer (= Quellen-"schulnummer" des Trägerdatensatzes)
+traegername (grunddaten.kurzbezeichnung bzw. amtsbez1-3)
+traegerschaftsart (aus Katalog "Traeger", z. B. "kreisfreie Stadt")
+strasse, plz, ort
+aufloesung, zuletzt_gesehen_am, quellen_stand
+```
+
+Das Feld heißt bewusst `traegerschaftsart`, nicht `schulamt` wie in `SVWS-Main-Server` – dort wird
+die Trägerschaftsart fälschlich unter dem Feldnamen `schulamt` geführt, was mit einer
+Schulaufsichtsbehörde verwechselt werden kann.
+
+### Status
+
+Mit diesem Nachtrag wird der Status auf **accepted** gehoben.
 
 ## Verweise
 
@@ -222,3 +316,4 @@ automatische Tenant- oder Schulzuordnung auslösen.
 - ADR-013 (Betreiber-UI für Schemaverwaltung und Schuldatenbanken)
 - ADR-014 (Verwendung echter Aufrufe der SVWS-Privileged-API)
 - `docs/entwicklung/svws-server-api.md`
+- GitHub-Issue #28 (Schuldatei: öffentliche Endpunkte auswerten und Schulträger-Katalog bereitstellen)

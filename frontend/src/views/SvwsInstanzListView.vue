@@ -5,7 +5,7 @@ import { useSvwsInstanzStore } from '@/stores/svwsInstanzStore'
 import { useSvwsSchemaFundStore } from '@/stores/svwsSchemaFundStore'
 import { ApiError } from '@/types/problem'
 import type { InstanzStatus, SvwsInstanz } from '@/types/svwsInstanz'
-import type { SchemaFundZuordnungsStatus } from '@/types/svwsSchemaFund'
+import type { SchemaFundZuordnungsStatus, SvwsSchemaFund } from '@/types/svwsSchemaFund'
 
 // Nebenläufigkeit und Mindestabstand für den automatischen Verbindungstest beim Öffnen der
 // Seite: begrenzt, um den "operator"-Connection-Pool (Quarkus-Default max. 20) nicht durch
@@ -56,9 +56,17 @@ const zuordnungsStatusKlasse: Record<SchemaFundZuordnungsStatus, string> = {
   KONFLIKT: 'status-unreachable',
 }
 
-function formatiereFlag(value: boolean | null): string {
-  if (value === null) return '–'
-  return value ? 'Ja' : 'Nein'
+// Verdichtet die vier Einzelflags der Privileged-API zu wenigen Auffälligkeits-Badges statt
+// vier eigener Tabellenspalten (Nutzer-Feedback: zu breite Tabelle) - der unauffällige
+// Normalfall (SVWS-Schema, in Config, nicht deaktiviert, nicht tainted) bleibt dadurch leer statt
+// vier "Ja"-Zellen zu belegen; nur Abweichungen vom Normalfall werden als Badge sichtbar.
+function merkmale(fund: SvwsSchemaFund): { label: string; klasse: string }[] {
+  const ergebnis: { label: string; klasse: string }[] = []
+  if (fund.isDeactivated === true) ergebnis.push({ label: 'Deaktiviert', klasse: 'status-unreachable' })
+  if (fund.isTainted === true) ergebnis.push({ label: 'Tainted', klasse: 'status-unreachable' })
+  if (fund.isInConfig === false) ergebnis.push({ label: 'Nicht in Config', klasse: 'status-degraded' })
+  if (fund.isSvws === false) ergebnis.push({ label: 'Kein SVWS-Schema', klasse: 'status-degraded' })
+  return ergebnis
 }
 
 // Auswahl je Instanz-ID, seitenübergreifend - Vorbereitung für spätere Massenverwaltung
@@ -214,7 +222,6 @@ function verbindungstestFarbe(instanz: SvwsInstanz): string {
             <th scope="col">Letzter Verbindungstest</th>
             <th scope="col">Aktiv/Inaktiv</th>
             <th scope="col">Aktionen</th>
-            <th scope="col">SVWS-Schemata</th>
           </tr>
         </thead>
         <tbody>
@@ -277,35 +284,30 @@ function verbindungstestFarbe(instanz: SvwsInstanz): string {
                 </span>
               </td>
               <td>
-                <RouterLink
-                  :to="{ name: 'svws-instanz-bearbeiten', params: { id: instanz.id } }"
-                  class="button-secondary"
-                >
-                  Bearbeiten
-                </RouterLink>
-              </td>
-              <td>
-                <button type="button" class="btn-klein" @click="fundeUmschalten(instanz)">
-                  {{ aufgeklappteIds[instanz.id] ? 'Ausblenden' : 'Anzeigen' }}
-                </button>
+                <div class="zelle-inline">
+                  <RouterLink
+                    :to="{ name: 'svws-instanz-bearbeiten', params: { id: instanz.id } }"
+                    class="button-secondary"
+                  >
+                    Bearbeiten
+                  </RouterLink>
+                  <button
+                    type="button"
+                    class="btn-klein"
+                    :aria-expanded="!!aufgeklappteIds[instanz.id]"
+                    @click="fundeUmschalten(instanz)"
+                  >
+                    {{ aufgeklappteIds[instanz.id] ? '▾' : '▸' }} Schemata
+                  </button>
+                </div>
               </td>
             </tr>
             <tr v-if="aufgeklappteIds[instanz.id]" class="funde-zeile">
-              <td colspan="11">
+              <td colspan="10">
                 <div class="funde-bereich">
                   <div class="funde-kopf">
                     <h2>SVWS-Schemata auf „{{ instanz.name }}“</h2>
                     <div class="zelle-inline">
-                      <button
-                        type="button"
-                        class="btn-klein"
-                        :disabled="schemaFundStore.syncingByInstanz[instanz.id]"
-                        @click="syncStarten(instanz)"
-                      >
-                        {{
-                          schemaFundStore.syncingByInstanz[instanz.id] ? 'Synchronisiere …' : 'Jetzt synchronisieren'
-                        }}
-                      </button>
                       <span
                         v-if="schemaFundStore.lastSyncResultByInstanz[instanz.id]"
                         :class="[
@@ -317,6 +319,16 @@ function verbindungstestFarbe(instanz: SvwsInstanz): string {
                       >
                         {{ schemaFundStore.lastSyncResultByInstanz[instanz.id]?.message }}
                       </span>
+                      <button
+                        type="button"
+                        class="btn-klein"
+                        :disabled="schemaFundStore.syncingByInstanz[instanz.id]"
+                        @click="syncStarten(instanz)"
+                      >
+                        {{
+                          schemaFundStore.syncingByInstanz[instanz.id] ? 'Synchronisiere …' : 'Jetzt synchronisieren'
+                        }}
+                      </button>
                     </div>
                   </div>
 
@@ -337,13 +349,10 @@ function verbindungstestFarbe(instanz: SvwsInstanz): string {
                       <thead>
                         <tr>
                           <th scope="col">Schemaname</th>
-                          <th scope="col">Benutzername</th>
-                          <th scope="col">Revision</th>
-                          <th scope="col">SVWS</th>
-                          <th scope="col">In Config</th>
-                          <th scope="col">Deaktiviert</th>
-                          <th scope="col">Tainted</th>
-                          <th scope="col">Zuletzt gesehen</th>
+                          <th scope="col">Benutzer</th>
+                          <th scope="col">Rev.</th>
+                          <th scope="col">Merkmale</th>
+                          <th scope="col">Gesehen</th>
                           <th scope="col">Zuordnung</th>
                         </tr>
                       </thead>
@@ -352,10 +361,18 @@ function verbindungstestFarbe(instanz: SvwsInstanz): string {
                           <td>{{ fund.schemaName }}</td>
                           <td>{{ fund.username }}</td>
                           <td>{{ fund.revision ?? '–' }}</td>
-                          <td>{{ formatiereFlag(fund.isSvws) }}</td>
-                          <td>{{ formatiereFlag(fund.isInConfig) }}</td>
-                          <td>{{ formatiereFlag(fund.isDeactivated) }}</td>
-                          <td>{{ formatiereFlag(fund.isTainted) }}</td>
+                          <td>
+                            <div class="merkmale-zelle">
+                              <span
+                                v-for="merkmal in merkmale(fund)"
+                                :key="merkmal.label"
+                                :class="['status', 'merkmal', merkmal.klasse]"
+                              >
+                                {{ merkmal.label }}
+                              </span>
+                              <span v-if="merkmale(fund).length === 0" class="hinweis-klein">–</span>
+                            </div>
+                          </td>
                           <td>{{ formatiereZeitpunkt(fund.lastSeenAt) }}</td>
                           <td>
                             <span :class="['status', zuordnungsStatusKlasse[fund.zuordnungsStatus]]">
@@ -381,7 +398,7 @@ function verbindungstestFarbe(instanz: SvwsInstanz): string {
             </tr>
           </template>
           <tr v-if="store.items.length === 0">
-            <td colspan="11">Keine SVWS-Instanzen gefunden.</td>
+            <td colspan="10">Keine SVWS-Instanzen gefunden.</td>
           </tr>
         </tbody>
       </table>
@@ -437,7 +454,22 @@ main {
 }
 
 .funde-tabelle {
-  min-width: 44rem;
+  min-width: 30rem;
+}
+
+.merkmale-zelle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.merkmal {
+  font-size: 0.78em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid currentColor;
+  white-space: nowrap;
 }
 
 .search {

@@ -2,8 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useSvwsInstanzStore } from '@/stores/svwsInstanzStore'
+import { useSvwsSchemaFundStore } from '@/stores/svwsSchemaFundStore'
 import { ApiError } from '@/types/problem'
 import type { InstanzStatus, SvwsInstanz } from '@/types/svwsInstanz'
+import type { SchemaFundZuordnungsStatus } from '@/types/svwsSchemaFund'
 
 // Nebenläufigkeit und Mindestabstand für den automatischen Verbindungstest beim Öffnen der
 // Seite: begrenzt, um den "operator"-Connection-Pool (Quarkus-Default max. 20) nicht durch
@@ -13,10 +15,51 @@ const AUTO_TEST_NEBENLAEUFIGKEIT = 4
 const AUTO_TEST_MINDESTABSTAND_MS = 5 * 60 * 1000
 
 const store = useSvwsInstanzStore()
+const schemaFundStore = useSvwsSchemaFundStore()
 const suchbegriff = ref('')
 const statusFilterAuswahl = ref<InstanzStatus | ''>('')
 const testendeIds = ref<Record<string, boolean>>({})
 const testFehler = ref<Record<string, string>>({})
+
+// Aufklappbarer Schema-Funde-Bereich je Instanz (ADR-013: "vollständige Liste ... über Filter,
+// Suche, aufklappbare Bereiche oder eine Instanz-Detailansicht zugänglich" statt Megatabelle).
+// Lädt beim ersten Aufklappen die gespeicherten Sync-/Fund-Daten (ADR-012: "Nutze vorhandene
+// Sync-/Fund-Daten, falls vorhanden, statt direkt im Frontend gegen SVWS zu sprechen") - der
+// Store selbst spricht nur beim expliziten "Jetzt synchronisieren" gegen die Privileged-API.
+const aufgeklappteIds = ref<Record<string, boolean>>({})
+
+async function fundeUmschalten(instanz: SvwsInstanz): Promise<void> {
+  const zuvorOffen = aufgeklappteIds.value[instanz.id]
+  aufgeklappteIds.value = { ...aufgeklappteIds.value, [instanz.id]: !zuvorOffen }
+  if (!zuvorOffen && !schemaFundStore.itemsByInstanz[instanz.id]) {
+    await schemaFundStore.fetchFunde(instanz.id)
+  }
+}
+
+async function syncStarten(instanz: SvwsInstanz): Promise<void> {
+  try {
+    await schemaFundStore.sync(instanz.id)
+  } catch {
+    // Fehler wird bereits im Store als errorByInstanz[instanz.id] gehalten und dort angezeigt.
+  }
+}
+
+const zuordnungsStatusLabel: Record<SchemaFundZuordnungsStatus, string> = {
+  BEKANNT: 'Bekannt',
+  UNZUGEORDNET: 'Unzugeordnet',
+  KONFLIKT: 'Konflikt',
+}
+
+const zuordnungsStatusKlasse: Record<SchemaFundZuordnungsStatus, string> = {
+  BEKANNT: 'status-aktiv',
+  UNZUGEORDNET: 'status-degraded',
+  KONFLIKT: 'status-unreachable',
+}
+
+function formatiereFlag(value: boolean | null): string {
+  if (value === null) return '–'
+  return value ? 'Ja' : 'Nein'
+}
 
 // Auswahl je Instanz-ID, seitenübergreifend - Vorbereitung für spätere Massenverwaltung
 // (Arbeitsauftrag: Batch-Verbindungstest, Bulk-Credential-/Schema-Import). Aktuell noch ohne
@@ -171,77 +214,174 @@ function verbindungstestFarbe(instanz: SvwsInstanz): string {
             <th scope="col">Letzter Verbindungstest</th>
             <th scope="col">Aktiv/Inaktiv</th>
             <th scope="col">Aktionen</th>
+            <th scope="col">SVWS-Schemata</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="instanz in store.items" :key="instanz.id">
-            <td class="checkbox-zelle">
-              <input v-model="ausgewaehlt[instanz.id]" type="checkbox" :aria-label="`'${instanz.name}' auswählen`" />
-            </td>
-            <td class="id-zelle" :title="instanz.id">{{ instanz.id }}</td>
-            <td>{{ instanz.name }}</td>
-            <td>{{ instanz.baseUrl }}</td>
-            <td class="beschreibung-zelle" :title="instanz.beschreibung ?? ''">
-              {{ instanz.beschreibung ?? '–' }}
-            </td>
-            <td>
-              <span :class="['status', `status-${instanz.status.toLowerCase()}`]">
-                {{ statusLabel[instanz.status] ?? instanz.status }}
-              </span>
-            </td>
-            <td>
-              <span
-                v-if="instanz.credentialsHinterlegt"
-                :class="['status', instanz.lastConnectionTestSuccess === false ? 'status-degraded' : 'status-aktiv']"
-              >
-                {{ formatiereZeitpunkt(instanz.credentialsUpdatedAt) }}
-              </span>
-              <span v-else class="status status-unreachable" title="Keine Zugangsdaten hinterlegt">✗</span>
-            </td>
-            <td>
-              <div class="zelle-inline">
-                <button
-                  type="button"
-                  class="btn-klein"
-                  :disabled="testendeIds[instanz.id]"
-                  :title="
-                    instanz.credentialsHinterlegt
-                      ? ''
-                      : 'Keine Zugangsdaten hinterlegt - prüft nur Basis-Erreichbarkeit'
-                  "
-                  @click="verbindungstestStarten(instanz)"
-                >
-                  {{ testendeIds[instanz.id] ? 'Teste …' : 'Testen' }}
-                </button>
-                <span v-if="testFehler[instanz.id]" role="alert" class="fehler hinweis-klein">
-                  {{ testFehler[instanz.id] }}
+          <template v-for="instanz in store.items" :key="instanz.id">
+            <tr>
+              <td class="checkbox-zelle">
+                <input v-model="ausgewaehlt[instanz.id]" type="checkbox" :aria-label="`'${instanz.name}' auswählen`" />
+              </td>
+              <td class="id-zelle" :title="instanz.id">{{ instanz.id }}</td>
+              <td>{{ instanz.name }}</td>
+              <td>{{ instanz.baseUrl }}</td>
+              <td class="beschreibung-zelle" :title="instanz.beschreibung ?? ''">
+                {{ instanz.beschreibung ?? '–' }}
+              </td>
+              <td>
+                <span :class="['status', `status-${instanz.status.toLowerCase()}`]">
+                  {{ statusLabel[instanz.status] ?? instanz.status }}
                 </span>
+              </td>
+              <td>
                 <span
-                  v-else-if="instanz.lastConnectionTestAt"
-                  :class="['status', verbindungstestFarbe(instanz)]"
-                  :title="instanz.lastConnectionTestMessage ?? ''"
+                  v-if="instanz.credentialsHinterlegt"
+                  :class="['status', instanz.lastConnectionTestSuccess === false ? 'status-degraded' : 'status-aktiv']"
                 >
-                  {{ formatiereZeitpunkt(instanz.lastConnectionTestAt) }}
+                  {{ formatiereZeitpunkt(instanz.credentialsUpdatedAt) }}
                 </span>
-                <span v-else class="hinweis-klein">Kein Test</span>
-              </div>
-            </td>
-            <td>
-              <span :class="['status', instanz.aktiv ? 'status-aktiv' : 'status-inaktiv']">
-                {{ instanz.aktiv ? 'Aktiv' : 'Deaktiviert' }}
-              </span>
-            </td>
-            <td>
-              <RouterLink
-                :to="{ name: 'svws-instanz-bearbeiten', params: { id: instanz.id } }"
-                class="button-secondary"
-              >
-                Bearbeiten
-              </RouterLink>
-            </td>
-          </tr>
+                <span v-else class="status status-unreachable" title="Keine Zugangsdaten hinterlegt">✗</span>
+              </td>
+              <td>
+                <div class="zelle-inline">
+                  <button
+                    type="button"
+                    class="btn-klein"
+                    :disabled="testendeIds[instanz.id]"
+                    :title="
+                      instanz.credentialsHinterlegt
+                        ? ''
+                        : 'Keine Zugangsdaten hinterlegt - prüft nur Basis-Erreichbarkeit'
+                    "
+                    @click="verbindungstestStarten(instanz)"
+                  >
+                    {{ testendeIds[instanz.id] ? 'Teste …' : 'Testen' }}
+                  </button>
+                  <span v-if="testFehler[instanz.id]" role="alert" class="fehler hinweis-klein">
+                    {{ testFehler[instanz.id] }}
+                  </span>
+                  <span
+                    v-else-if="instanz.lastConnectionTestAt"
+                    :class="['status', verbindungstestFarbe(instanz)]"
+                    :title="instanz.lastConnectionTestMessage ?? ''"
+                  >
+                    {{ formatiereZeitpunkt(instanz.lastConnectionTestAt) }}
+                  </span>
+                  <span v-else class="hinweis-klein">Kein Test</span>
+                </div>
+              </td>
+              <td>
+                <span :class="['status', instanz.aktiv ? 'status-aktiv' : 'status-inaktiv']">
+                  {{ instanz.aktiv ? 'Aktiv' : 'Deaktiviert' }}
+                </span>
+              </td>
+              <td>
+                <RouterLink
+                  :to="{ name: 'svws-instanz-bearbeiten', params: { id: instanz.id } }"
+                  class="button-secondary"
+                >
+                  Bearbeiten
+                </RouterLink>
+              </td>
+              <td>
+                <button type="button" class="btn-klein" @click="fundeUmschalten(instanz)">
+                  {{ aufgeklappteIds[instanz.id] ? 'Ausblenden' : 'Anzeigen' }}
+                </button>
+              </td>
+            </tr>
+            <tr v-if="aufgeklappteIds[instanz.id]" class="funde-zeile">
+              <td colspan="11">
+                <div class="funde-bereich">
+                  <div class="funde-kopf">
+                    <h2>SVWS-Schemata auf „{{ instanz.name }}“</h2>
+                    <div class="zelle-inline">
+                      <button
+                        type="button"
+                        class="btn-klein"
+                        :disabled="schemaFundStore.syncingByInstanz[instanz.id]"
+                        @click="syncStarten(instanz)"
+                      >
+                        {{
+                          schemaFundStore.syncingByInstanz[instanz.id] ? 'Synchronisiere …' : 'Jetzt synchronisieren'
+                        }}
+                      </button>
+                      <span
+                        v-if="schemaFundStore.lastSyncResultByInstanz[instanz.id]"
+                        :class="[
+                          'status',
+                          schemaFundStore.lastSyncResultByInstanz[instanz.id]?.success
+                            ? 'status-aktiv'
+                            : 'status-unreachable',
+                        ]"
+                      >
+                        {{ schemaFundStore.lastSyncResultByInstanz[instanz.id]?.message }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <p v-if="schemaFundStore.errorByInstanz[instanz.id]" role="alert" class="fehler">
+                    {{ schemaFundStore.errorByInstanz[instanz.id] }}
+                  </p>
+                  <p v-else-if="schemaFundStore.loadingByInstanz[instanz.id]">Lädt …</p>
+                  <p v-else-if="(schemaFundStore.itemsByInstanz[instanz.id]?.length ?? 0) === 0" class="hinweis-klein">
+                    Keine gespeicherten Sync-Funde. Auf „Jetzt synchronisieren“ klicken, um die SVWS-Instanz abzufragen.
+                  </p>
+                  <div v-else class="table-wrap">
+                    <table class="funde-tabelle">
+                      <caption class="sr-only">
+                        SVWS-Schemata der Instanz „{{
+                          instanz.name
+                        }}“
+                      </caption>
+                      <thead>
+                        <tr>
+                          <th scope="col">Schemaname</th>
+                          <th scope="col">Benutzername</th>
+                          <th scope="col">Revision</th>
+                          <th scope="col">SVWS</th>
+                          <th scope="col">In Config</th>
+                          <th scope="col">Deaktiviert</th>
+                          <th scope="col">Tainted</th>
+                          <th scope="col">Zuletzt gesehen</th>
+                          <th scope="col">Zuordnung</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="fund in schemaFundStore.itemsByInstanz[instanz.id]" :key="fund.id">
+                          <td>{{ fund.schemaName }}</td>
+                          <td>{{ fund.username }}</td>
+                          <td>{{ fund.revision ?? '–' }}</td>
+                          <td>{{ formatiereFlag(fund.isSvws) }}</td>
+                          <td>{{ formatiereFlag(fund.isInConfig) }}</td>
+                          <td>{{ formatiereFlag(fund.isDeactivated) }}</td>
+                          <td>{{ formatiereFlag(fund.isTainted) }}</td>
+                          <td>{{ formatiereZeitpunkt(fund.lastSeenAt) }}</td>
+                          <td>
+                            <span :class="['status', zuordnungsStatusKlasse[fund.zuordnungsStatus]]">
+                              {{ zuordnungsStatusLabel[fund.zuordnungsStatus] }}
+                            </span>
+                            <RouterLink
+                              v-if="fund.schuleId && fund.schultraegerId"
+                              :to="{
+                                name: 'schule-detail',
+                                params: { schultraegerId: fund.schultraegerId, schuleId: fund.schuleId },
+                              }"
+                              class="hinweis-klein"
+                            >
+                              Zur Schule
+                            </RouterLink>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          </template>
           <tr v-if="store.items.length === 0">
-            <td colspan="10">Keine SVWS-Instanzen gefunden.</td>
+            <td colspan="11">Keine SVWS-Instanzen gefunden.</td>
           </tr>
         </tbody>
       </table>
@@ -270,6 +410,34 @@ main {
   justify-content: space-between;
   align-items: center;
   gap: 0.75rem;
+}
+
+.funde-zeile {
+  background: var(--surface-strong);
+}
+
+.funde-bereich {
+  padding: 0.75rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.funde-kopf {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.funde-kopf h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.funde-tabelle {
+  min-width: 44rem;
 }
 
 .search {

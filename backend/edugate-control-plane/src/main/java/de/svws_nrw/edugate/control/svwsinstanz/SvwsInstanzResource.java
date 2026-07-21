@@ -5,6 +5,8 @@ import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsInstanzCredentialsRequest
 import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsInstanzDto;
 import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsInstanzPageDto;
 import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsInstanzUpdateRequest;
+import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsSchemaFundDto;
+import de.svws_nrw.edugate.control.svwsinstanz.dto.SvwsSchemaSyncResultDto;
 import de.svws_nrw.edugate.core.domain.InstanzStatus;
 import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.annotation.security.RolesAllowed;
@@ -22,6 +24,7 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -40,6 +43,9 @@ public class SvwsInstanzResource {
 
     @Inject
     SvwsInstanzService service;
+
+    @Inject
+    SvwsSchemaFundService schemaFundService;
 
     @Inject
     SecurityIdentity securityIdentity;
@@ -92,6 +98,31 @@ public class SvwsInstanzResource {
     @Consumes(MediaType.WILDCARD)
     public SvwsInstanzDto testConnection(@PathParam("id") final UUID id) {
         return service.testConnection(adminSubject(), id);
+    }
+
+    /**
+     * Read-only Sync mit der SVWS-Privileged-API (ADR-014 Stufe 1): liest die auf der Instanz
+     * technisch vorhandenen SVWS-Schemata und ersetzt die gespeicherten Funde
+     * ({@link #schemaFunde(UUID)}) durch das aktuelle Ergebnis. Verändert ausschließlich
+     * EduGate-interne Sync-Daten, keine SVWS-Daten (keine "gefährliche Operation" i. S. v.
+     * ADR-013).
+     */
+    @POST
+    @Path("/{id}/schema-sync")
+    @Consumes(MediaType.WILDCARD)
+    public SvwsSchemaSyncResultDto syncSchemas(@PathParam("id") final UUID id) {
+        return schemaFundService.sync(adminSubject(), id);
+    }
+
+    /**
+     * Liefert die zuletzt gespeicherten Sync-Funde der Instanz (ADR-012: "Nutze vorhandene
+     * Sync-/Fund-Daten ... statt direkt im Frontend gegen SVWS zu sprechen") - liest ausschließlich
+     * {@code svws_schema_fund}, ruft nicht selbst die SVWS-Instanz auf.
+     */
+    @GET
+    @Path("/{id}/schema-funde")
+    public List<SvwsSchemaFundDto> schemaFunde(@PathParam("id") final UUID id) {
+        return schemaFundService.list(adminSubject(), id);
     }
 
     private String adminSubject() {

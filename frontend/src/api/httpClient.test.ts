@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { apiRequest } from './httpClient'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { apiRequest, configureUnauthorizedRecoveryHandler } from './httpClient'
 import { ApiError } from '@/types/problem'
 
 function jsonResponse(body: unknown, status: number, contentType = 'application/json'): Response {
@@ -7,6 +7,11 @@ function jsonResponse(body: unknown, status: number, contentType = 'application/
 }
 
 describe('apiRequest', () => {
+  afterEach(() => {
+    configureUnauthorizedRecoveryHandler(null)
+    vi.unstubAllGlobals()
+  })
+
   it('hängt das Bearer-Token als Authorization-Header an, wenn eines vorhanden ist', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }, 200))
     vi.stubGlobal('fetch', fetchMock)
@@ -18,7 +23,6 @@ describe('apiRequest', () => {
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer mein-token' }) }),
     )
 
-    vi.unstubAllGlobals()
   })
 
   it('hängt keinen Authorization-Header an, wenn kein Token vorhanden ist', async () => {
@@ -30,7 +34,6 @@ describe('apiRequest', () => {
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect((requestInit.headers as Record<string, string>).Authorization).toBeUndefined()
 
-    vi.unstubAllGlobals()
   })
 
   it('liefert den geparsten JSON-Body bei Erfolg', async () => {
@@ -39,7 +42,6 @@ describe('apiRequest', () => {
     const result = await apiRequest<{ name: string }>('/schultraeger/1', { getAccessToken: () => null })
 
     expect(result).toEqual({ name: 'Musterstadt' })
-    vi.unstubAllGlobals()
   })
 
   it('liefert undefined bei 204 No Content', async () => {
@@ -48,7 +50,6 @@ describe('apiRequest', () => {
     const result = await apiRequest('/schultraeger/1', { method: 'DELETE', getAccessToken: () => null })
 
     expect(result).toBeUndefined()
-    vi.unstubAllGlobals()
   })
 
   it('wirft ApiError mit dem geparsten ProblemDetail bei einer Fehlerantwort', async () => {
@@ -66,7 +67,6 @@ describe('apiRequest', () => {
       problem,
     })
 
-    vi.unstubAllGlobals()
   })
 
   it('ApiError ist eine echte Instanz von ApiError', async () => {
@@ -75,6 +75,37 @@ describe('apiRequest', () => {
 
     await expect(apiRequest('/schultraeger', { getAccessToken: () => null })).rejects.toBeInstanceOf(ApiError)
 
-    vi.unstubAllGlobals()
+  })
+
+  it('erneuert bei 401 einmal und wiederholt den Request erfolgreich', async () => {
+    const tokenProvider = vi.fn().mockReturnValueOnce('altes-token').mockReturnValueOnce('neues-token')
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 401, headers: { 'www-authenticate': 'Bearer' } }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }, 200))
+    const recoveryMock = vi.fn().mockResolvedValue(true)
+
+    vi.stubGlobal('fetch', fetchMock)
+    configureUnauthorizedRecoveryHandler(recoveryMock)
+
+    const result = await apiRequest<{ ok: boolean }>('/schultraeger', { getAccessToken: tokenProvider })
+
+    expect(result).toEqual({ ok: true })
+    expect(recoveryMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(tokenProvider).toHaveBeenCalledTimes(2)
+  })
+
+  it('wirft bei 401 einen ApiError, wenn Erneuerung nicht möglich ist', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 401, headers: { 'www-authenticate': 'Bearer' } }))
+    const recoveryMock = vi.fn().mockResolvedValue(false)
+
+    vi.stubGlobal('fetch', fetchMock)
+    configureUnauthorizedRecoveryHandler(recoveryMock)
+
+    await expect(apiRequest('/schultraeger', { getAccessToken: () => 'token' })).rejects.toBeInstanceOf(ApiError)
+
+    expect(recoveryMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

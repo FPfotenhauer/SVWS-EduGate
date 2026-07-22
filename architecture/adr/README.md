@@ -26,6 +26,7 @@ Dieser Ordner enthält alle Architecture Decision Records für SVWS-EduGate im [
 | [ADR-018](./ADR-018-exportformat-verbindungsdaten-schuldatenbanken.md) | Exportformat für Verbindungsdaten von Schuldatenbanken | proposed |
 | [ADR-019](./ADR-019-api-token-erstellung-fuer-svws-external-api.md) | API-Token-Erstellung für die SVWS-External-API | proposed |
 | [ADR-020](./ADR-020-schulen-als-stammdaten-vor-schuldatenbanken.md) | Schulen als Stammdaten vor Schuldatenbanken | proposed |
+| [ADR-021](./ADR-021-token-erneuerung-und-401-recovery-im-frontend.md) | Token-Erneuerung und 401-Recovery im Frontend | accepted |
 
 ## Neues ADR anlegen
 

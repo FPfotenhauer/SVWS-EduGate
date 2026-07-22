@@ -1,9 +1,14 @@
 import { ApiError, type ProblemDetail } from '@/types/problem'
 
 const BASE_URL = import.meta.env.VITE_CONTROL_PLANE_API_URL
+let unauthorizedRecoveryHandler: (() => Promise<boolean>) | null = null
 
 export interface AccessTokenProvider {
   (): string | null
+}
+
+export function configureUnauthorizedRecoveryHandler(handler: (() => Promise<boolean>) | null): void {
+  unauthorizedRecoveryHandler = handler
 }
 
 /**
@@ -14,17 +19,28 @@ export async function apiRequest<T>(
   path: string,
   options: { method?: string; body?: unknown; getAccessToken: AccessTokenProvider },
 ): Promise<T> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  const token = options.getAccessToken()
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
+  const execute = async (): Promise<Response> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const token = options.getAccessToken()
+    if (token) {
+      headers.Authorization = `Bearer ${token}`
+    }
+
+    return fetch(`${BASE_URL}${path}`, {
+      method: options.method ?? 'GET',
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    })
   }
 
-  const response = await fetch(`${BASE_URL}${path}`, {
-    method: options.method ?? 'GET',
-    headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  })
+  let response = await execute()
+
+  if (response.status === 401 && unauthorizedRecoveryHandler) {
+    const recovered = await unauthorizedRecoveryHandler()
+    if (recovered) {
+      response = await execute()
+    }
+  }
 
   if (response.status === 204) {
     return undefined as T

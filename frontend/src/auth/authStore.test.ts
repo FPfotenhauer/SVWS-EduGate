@@ -1,6 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it } from 'vitest'
-import { useAuthStore } from './authStore'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { useAuthStore, userManager } from './authStore'
 import type { User } from 'oidc-client-ts'
 
 // Baut ein unsigniertes, aber strukturell korrektes JWT (header.payload.signature) mit den
@@ -19,6 +19,10 @@ function alsUser(accessToken: string | undefined): User {
 describe('authStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('roles ist leer ohne angemeldeten Benutzer', () => {
@@ -45,5 +49,30 @@ describe('authStore', () => {
     store.user = alsUser('kein.gueltiges-jwt')
 
     expect(store.roles).toEqual([])
+  })
+
+  it('renewToken erneuert ein abgelaufenes Token per signinSilent', async () => {
+    const abgelaufen = { expired: true } as User
+    const erneuert = { expired: false, access_token: 'neu' } as User
+    vi.spyOn(userManager, 'getUser').mockResolvedValue(abgelaufen)
+    vi.spyOn(userManager, 'signinSilent').mockResolvedValue(erneuert)
+
+    const store = useAuthStore()
+    const result = await store.renewToken()
+
+    expect(result).toBe(true)
+    expect(store.user).toStrictEqual(erneuert)
+  })
+
+  it('renewToken liefert false, wenn stille Erneuerung fehlschlägt', async () => {
+    const abgelaufen = { expired: true } as User
+    vi.spyOn(userManager, 'getUser').mockResolvedValue(abgelaufen)
+    vi.spyOn(userManager, 'signinSilent').mockRejectedValue(new Error('silent renew failed'))
+
+    const store = useAuthStore()
+    const result = await store.renewToken()
+
+    expect(result).toBe(false)
+    expect(store.user).toBeNull()
   })
 })

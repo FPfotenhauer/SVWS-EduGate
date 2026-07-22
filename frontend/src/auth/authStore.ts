@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import { oidcSettings } from './oidcConfig'
 
 export const userManager = new UserManager(oidcSettings)
+let renewTokenInFlight: Promise<boolean> | null = null
 
 /** Hält den angemeldeten Benutzer nur im Speicher (Pinia-State), niemals in localStorage. */
 export const useAuthStore = defineStore('auth', () => {
@@ -39,7 +40,41 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = await userManager.getUser()
   }
 
-  return { user, isAuthenticated, accessToken, displayName, roles, login, logout, completeLogin, restore }
+  async function renewToken(): Promise<boolean> {
+    if (renewTokenInFlight) {
+      return renewTokenInFlight
+    }
+
+    renewTokenInFlight = (async () => {
+      try {
+        const currentUser = await userManager.getUser()
+        user.value = currentUser
+
+        if (!currentUser) {
+          return false
+        }
+
+        if (!currentUser.expired) {
+          return true
+        }
+
+        const renewedUser = await userManager.signinSilent()
+        user.value = renewedUser
+        return !renewedUser.expired
+      } catch {
+        // Wenn die stille Erneuerung scheitert (z. B. kein gültiger Session-Cookie mehr),
+        // darf kein veralteter User im Store verbleiben.
+        user.value = null
+        return false
+      } finally {
+        renewTokenInFlight = null
+      }
+    })()
+
+    return renewTokenInFlight
+  }
+
+  return { user, isAuthenticated, accessToken, displayName, roles, login, logout, completeLogin, restore, renewToken }
 })
 
 /**

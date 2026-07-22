@@ -11,9 +11,10 @@ export const oidcSettings: UserManagerSettings = {
   authority: import.meta.env.VITE_OIDC_AUTH_SERVER_URL,
   client_id: import.meta.env.VITE_OIDC_CLIENT_ID,
   redirect_uri: `${window.location.origin}/auth/callback`,
+  silent_redirect_uri: `${window.location.origin}/auth/callback`,
   post_logout_redirect_uri: window.location.origin,
   response_type: 'code',
   scope: 'openid profile',
   userStore: new WebStorageStateStore({ store: new InMemoryWebStorage() }),
-  automaticSilentRenew: false,
+  automaticSilentRenew: true,
 }

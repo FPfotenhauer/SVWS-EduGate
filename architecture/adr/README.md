@@ -27,6 +27,7 @@ Dieser Ordner enthält alle Architecture Decision Records für SVWS-EduGate im [
 | [ADR-019](./ADR-019-api-token-erstellung-fuer-svws-external-api.md) | API-Token-Erstellung für die SVWS-External-API | proposed |
 | [ADR-020](./ADR-020-schulen-als-stammdaten-vor-schuldatenbanken.md) | Schulen als Stammdaten vor Schuldatenbanken | proposed |
 | [ADR-021](./ADR-021-token-erneuerung-und-401-recovery-im-frontend.md) | Token-Erneuerung und 401-Recovery im Frontend | accepted |
+| [ADR-022](./ADR-022-interne-pki-und-truststore-strategie-fuer-svws-tls.md) | Interne PKI- und Truststore-Strategie für SVWS-TLS | proposed |
 
 ## Neues ADR anlegen
 

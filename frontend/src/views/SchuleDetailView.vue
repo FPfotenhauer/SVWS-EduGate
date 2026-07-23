@@ -248,60 +248,6 @@ async function bestaetigenSchuleLoeschen(): Promise<void> {
       </button>
     </div>
 
-    <section class="operationen">
-      <h2>Operationen</h2>
-
-      <div class="operationen-grid">
-        <article class="operation-karte">
-          <h3>Leeres Schema erstellen</h3>
-          <p>Legt eine neue Schuldatenbank für diese Schule auf einer SVWS-Instanz an.</p>
-          <button
-            type="button"
-            class="button-primary"
-            :disabled="!geladeneSchule?.aktiv"
-            @click="schemaHinzufuegenOeffnen"
-          >
-            Anlegen
-          </button>
-          <p v-if="geladeneSchule && !geladeneSchule.aktiv" class="hinweis-klein">
-            Nicht möglich - diese Schule ist deaktiviert.
-          </p>
-        </article>
-
-        <article class="operation-karte">
-          <h3>Migration durchführen</h3>
-          <p>Daten aus einem Altsystem in ein Schema dieser Schule migrieren.</p>
-          <button type="button" class="button-secondary" disabled>In Vorbereitung</button>
-        </article>
-
-        <article class="operation-karte">
-          <h3>Backup</h3>
-          <p>Sicherung einer Schuldatenbank erstellen oder einspielen.</p>
-          <button type="button" class="button-secondary" disabled>In Vorbereitung</button>
-        </article>
-
-        <article v-if="geladeneSchule?.aktiv" class="operation-karte gefahr">
-          <h3>Schule deaktivieren</h3>
-          <p>
-            Die Schule bleibt erhalten, ist aber nicht mehr aktiv nutzbar. Vorhandene Schuldatenbanken bleiben bestehen.
-          </p>
-          <button type="button" class="danger" @click="deaktivierenBestaetigen = true">Deaktivieren</button>
-        </article>
-
-        <article class="operation-karte gefahr">
-          <h3>Schule endgültig löschen</h3>
-          <p>
-            Nur möglich, solange keine echten Schuldatenbanken mehr auf einer SVWS-Instanz existieren (siehe unten).
-            Diese Aktion kann nicht rückgängig gemacht werden.
-          </p>
-          <p v-if="loeschenFehler" role="alert" class="fehler">{{ loeschenFehler }}</p>
-          <button type="button" class="danger" @click="loeschenBestaetigen = true">Endgültig löschen</button>
-        </article>
-      </div>
-
-      <p class="hinweis-klein">Weitere Operationen (z. B. Zertifikatsverwaltung, Credential-Rotation) folgen später.</p>
-    </section>
-
     <section class="schemata">
       <h2>Schuldatenbanken</h2>
 
@@ -347,6 +293,60 @@ async function bestaetigenSchuleLoeschen(): Promise<void> {
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section class="operationen">
+      <h2>Operationen</h2>
+
+      <div class="operationen-grid">
+        <article class="operation-karte">
+          <h3>Leeres Schema erstellen</h3>
+          <p>Legt eine neue Schuldatenbank für diese Schule auf einer SVWS-Instanz an.</p>
+          <button
+            type="button"
+            class="button-primary"
+            :disabled="!geladeneSchule?.aktiv"
+            @click="schemaHinzufuegenOeffnen"
+          >
+            Anlegen
+          </button>
+          <p v-if="geladeneSchule && !geladeneSchule.aktiv" class="hinweis-klein">
+            Nicht möglich - diese Schule ist deaktiviert.
+          </p>
+        </article>
+
+        <article class="operation-karte">
+          <h3>Migration durchführen</h3>
+          <p>Daten aus einem Altsystem in ein Schema dieser Schule migrieren.</p>
+          <button type="button" class="button-secondary" disabled>In Vorbereitung</button>
+        </article>
+
+        <article class="operation-karte">
+          <h3>Backup</h3>
+          <p>Sicherung einer Schuldatenbank erstellen oder einspielen.</p>
+          <button type="button" class="button-secondary" disabled>In Vorbereitung</button>
+        </article>
+
+        <article v-if="geladeneSchule?.aktiv" class="operation-karte gefahr">
+          <h3>Schule deaktivieren</h3>
+          <p>
+            Die Schule bleibt erhalten, ist aber nicht mehr aktiv nutzbar. Vorhandene Schuldatenbanken bleiben bestehen.
+          </p>
+          <button type="button" class="danger" @click="deaktivierenBestaetigen = true">Deaktivieren</button>
+        </article>
+
+        <article class="operation-karte gefahr">
+          <h3>Schule endgültig löschen</h3>
+          <p>
+            Nur möglich, solange keine echten Schuldatenbanken mehr auf einer SVWS-Instanz existieren (siehe oben).
+            Diese Aktion kann nicht rückgängig gemacht werden.
+          </p>
+          <p v-if="loeschenFehler" role="alert" class="fehler">{{ loeschenFehler }}</p>
+          <button type="button" class="danger" @click="loeschenBestaetigen = true">Endgültig löschen</button>
+        </article>
+      </div>
+
+      <p class="hinweis-klein">Weitere Operationen (z. B. Zertifikatsverwaltung, Credential-Rotation) folgen später.</p>
     </section>
 
     <Modal :open="schuleBearbeitenModalOffen" titel="Schule bearbeiten" @close="schuleBearbeitenSchliessen">

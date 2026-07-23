@@ -1,5 +1,5 @@
 import { apiRequest, type AccessTokenProvider } from './httpClient'
-import type { Schule, SchuleFormData } from '@/types/schule'
+import type { Schule, SchuleCreateFormData, SchuleFormData } from '@/types/schule'
 
 function basePath(schultraegerId: string): string {
   return `/schultraeger/${schultraegerId}/schulen`
@@ -15,7 +15,7 @@ export function getSchule(schultraegerId: string, id: string, getAccessToken: Ac
 
 export function createSchule(
   schultraegerId: string,
-  data: SchuleFormData,
+  data: SchuleCreateFormData,
   getAccessToken: AccessTokenProvider,
 ): Promise<Schule> {
   return apiRequest<Schule>(basePath(schultraegerId), { method: 'POST', body: data, getAccessToken })

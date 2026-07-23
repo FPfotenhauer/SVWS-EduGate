@@ -35,7 +35,10 @@ import java.util.UUID;
 @ApplicationScoped
 public class SchuleService {
 
-    private static final String SELECT_COLUMNS = "id, tenant_id, schulnummer, name, aktiv, created_at, updated_at";
+    private static final String SELECT_COLUMNS = "id, tenant_id, schulnummer, name, aktiv, "
+        + "katalog_id, quelle, sonderfall_hinweis, created_at, updated_at";
+
+    private static final String POSTGRES_FOREIGN_KEY_VIOLATION = "23503";
 
     private static final String INSERT_AUDIT = """
         INSERT INTO audit_admin (admin_subject, action, entity_type, entity_id, tenant_id, outcome, details)
@@ -67,16 +70,31 @@ public class SchuleService {
 
     public SchuleDto create(final UUID schultraegerId, final SchuleCreateRequest request) {
         return tenantAccess.execute(schultraegerId, connection -> {
-            final String sql = "INSERT INTO schule (tenant_id, schulnummer, name) VALUES (?, ?, ?) "
-                + "RETURNING " + SELECT_COLUMNS;
+            // Herkunft wird serverseitig entschieden, nicht dem Client überlassen (ADR-020,
+            // analog SchultraegerService#create): eine katalogId erzwingt LANDESLISTE,
+            // unabhängig vom sonderfall-Flag.
+            final String quelle = request.katalogId() != null ? "LANDESLISTE" : request.sonderfall() ? "SONDERFALL" : "MANUELL";
+            final String sonderfallHinweis = "SONDERFALL".equals(quelle) ? request.sonderfallHinweis() : null;
+
+            final String sql = "INSERT INTO schule (tenant_id, schulnummer, name, katalog_id, quelle, sonderfall_hinweis) "
+                + "VALUES (?, ?, ?, ?, ?, ?) RETURNING " + SELECT_COLUMNS;
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setObject(1, schultraegerId);
                 statement.setString(2, request.schulnummer());
                 statement.setString(3, request.name());
+                statement.setObject(4, request.katalogId());
+                statement.setString(5, quelle);
+                statement.setString(6, sonderfallHinweis);
                 try (ResultSet resultSet = statement.executeQuery()) {
                     resultSet.next();
                     return toDto(resultSet);
                 }
+            } catch (final SQLException e) {
+                if (POSTGRES_FOREIGN_KEY_VIOLATION.equals(e.getSQLState())) {
+                    throw new OperatorNotFoundException(
+                        "Der referenzierte Schuldatei-Katalogeintrag '" + request.katalogId() + "' wurde nicht gefunden.");
+                }
+                throw e;
             }
         });
     }
@@ -212,6 +230,9 @@ public class SchuleService {
             resultSet.getString("schulnummer"),
             resultSet.getString("name"),
             resultSet.getBoolean("aktiv"),
+            (UUID) resultSet.getObject("katalog_id"),
+            resultSet.getString("quelle"),
+            resultSet.getString("sonderfall_hinweis"),
             resultSet.getTimestamp("created_at").toInstant(),
             resultSet.getTimestamp("updated_at").toInstant());
     }

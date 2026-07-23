@@ -4,11 +4,13 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import Modal from '@/components/Modal.vue'
 import { useSchemaOverviewStore } from '@/stores/schemaOverviewStore'
 import { useSchemaUmgebungStore } from '@/stores/schemaUmgebungStore'
+import { useSchuldateiStore } from '@/stores/schuldateiStore'
 import { useSchuleStore } from '@/stores/schuleStore'
 import { useSchultraegerStore } from '@/stores/schultraegerStore'
 import { useSvwsInstanzStore } from '@/stores/svwsInstanzStore'
 import { ApiError } from '@/types/problem'
 import type { SchemaStatus } from '@/types/schema'
+import type { SchuleKatalog } from '@/types/schuldatei'
 
 // Fachliche Sicht "Schulträger/Schule -> Schuldatenbanken -> SVWS-Instanz" (ADR-013): primärer
 // Einstieg für die Schemaverwaltung, mandantenübergreifend gefiltert/gruppiert statt unter
@@ -20,6 +22,7 @@ const schultraegerStore = useSchultraegerStore()
 const svwsInstanzStore = useSvwsInstanzStore()
 const schuleStore = useSchuleStore()
 const schemaUmgebungStore = useSchemaUmgebungStore()
+const schuldateiStore = useSchuldateiStore()
 
 // Kontext aus Querverweisen (ADR-013: "Navigation zwischen den Sichten muss den Kontext
 // erhalten"), z. B. von der Schulträger- oder der SVWS-Instanz-Seite kommend.
@@ -113,16 +116,70 @@ const neueSchuleName = ref('')
 const neueSchuleSpeichern = ref(false)
 const neueSchuleFehler = ref<string | null>(null)
 
+// --- Übernahme aus dem Schuldatei-Katalog beim Neuanlegen (ADR-020, analog SchultraegerFormView):
+// Die Katalogsuche wird auf die Trägernummer des im Formular gewählten Schulträgers eingegrenzt.
+// Sonderfälle (Schule ohne Katalogeintrag) bleiben möglich: Ohne Katalogauswahl kann die Herkunft
+// optional als Sonderfall mit Begründung markiert werden, sonst gilt MANUELL.
+const katalogAuswahlOffen = ref(false)
+const katalogSuchbegriff = ref('')
+const ausgewaehlterKatalogEintrag = ref<SchuleKatalog | null>(null)
+const istSonderfall = ref(false)
+const sonderfallHinweis = ref('')
+
+const ausgewaehlteTraegernummer = computed(
+  () =>
+    schultraegerStore.items.find((schultraeger) => schultraeger.id === neueSchuleSchultraegerId.value)?.traegernummer ??
+    '',
+)
+
 function neueSchuleOeffnen(): void {
   neueSchuleSchultraegerId.value = aktiveSchultraeger.value[0]?.id ?? ''
   neueSchuleSchulnummer.value = ''
   neueSchuleName.value = ''
   neueSchuleFehler.value = null
+  katalogAuswahlOffen.value = false
+  ausgewaehlterKatalogEintrag.value = null
+  istSonderfall.value = false
+  sonderfallHinweis.value = ''
   neueSchuleModalOffen.value = true
 }
 
 function neueSchuleSchliessen(): void {
   neueSchuleModalOffen.value = false
+}
+
+// Der Katalogtreffer gilt nur für den Schulträger, unter dem er ausgewählt wurde - ein
+// Schulträgerwechsel im Formular verwirft deshalb eine bereits getroffene Katalogauswahl.
+function neueSchuleSchultraegerGeaendert(): void {
+  ausgewaehlterKatalogEintrag.value = null
+}
+
+async function katalogAuswahlOeffnen(): Promise<void> {
+  katalogAuswahlOffen.value = true
+  katalogSuchbegriff.value = ''
+  await schuldateiStore.fetchSchulen({
+    page: 0,
+    q: '',
+    schultraegernummer: ausgewaehlteTraegernummer.value,
+    nurAktive: true,
+  })
+}
+
+async function katalogSuchen(): Promise<void> {
+  await schuldateiStore.fetchSchulen({ page: 0, q: katalogSuchbegriff.value })
+}
+
+function katalogEintragUebernehmen(eintrag: SchuleKatalog): void {
+  neueSchuleSchulnummer.value = eintrag.schulnummer
+  neueSchuleName.value = eintrag.schulname
+  ausgewaehlterKatalogEintrag.value = eintrag
+  istSonderfall.value = false
+  sonderfallHinweis.value = ''
+  katalogAuswahlOffen.value = false
+}
+
+function katalogAuswahlAufheben(): void {
+  ausgewaehlterKatalogEintrag.value = null
 }
 
 async function neueSchuleAbsenden(): Promise<void> {
@@ -132,6 +189,9 @@ async function neueSchuleAbsenden(): Promise<void> {
     const angelegteSchule = await schuleStore.create(neueSchuleSchultraegerId.value, {
       schulnummer: neueSchuleSchulnummer.value,
       name: neueSchuleName.value,
+      katalogId: ausgewaehlterKatalogEintrag.value?.id,
+      sonderfall: istSonderfall.value,
+      sonderfallHinweis: sonderfallHinweis.value || undefined,
     })
     neueSchuleModalOffen.value = false
     await router.push({
@@ -151,7 +211,7 @@ async function neueSchuleAbsenden(): Promise<void> {
   <main>
     <header class="toolbar">
       <h1>Schuldatenbanken</h1>
-      <button type="button" class="button-primary" @click="neueSchuleOeffnen">Datenbank anlegen</button>
+      <button type="button" class="button-primary" @click="neueSchuleOeffnen">Schule anlegen</button>
     </header>
 
     <form class="search" @submit.prevent="suchen">
@@ -284,7 +344,12 @@ async function neueSchuleAbsenden(): Promise<void> {
 
         <div class="feld">
           <label for="neue-schule-traeger">Schulträger</label>
-          <select id="neue-schule-traeger" v-model="neueSchuleSchultraegerId" required>
+          <select
+            id="neue-schule-traeger"
+            v-model="neueSchuleSchultraegerId"
+            required
+            @change="neueSchuleSchultraegerGeaendert"
+          >
             <option v-for="schultraeger in aktiveSchultraeger" :key="schultraeger.id" :value="schultraeger.id">
               {{ schultraeger.name }}
             </option>
@@ -294,9 +359,41 @@ async function neueSchuleAbsenden(): Promise<void> {
           </p>
         </div>
 
+        <div v-if="ausgewaehlterKatalogEintrag" class="katalog-badge">
+          <span class="status status-aktiv">
+            Aus der Schuldatei übernommen: {{ ausgewaehlterKatalogEintrag.schulnummer }} –
+            {{ ausgewaehlterKatalogEintrag.schulname }}
+          </span>
+          <button type="button" class="button-secondary btn-klein" @click="katalogAuswahlAufheben">
+            Auswahl aufheben
+          </button>
+        </div>
+
         <div class="feld">
           <label for="neue-schule-schulnummer">Schulnummer</label>
-          <input id="neue-schule-schulnummer" v-model="neueSchuleSchulnummer" type="text" required />
+          <div class="schulnummer-feld">
+            <input id="neue-schule-schulnummer" v-model="neueSchuleSchulnummer" type="text" required />
+            <button
+              type="button"
+              class="button-secondary btn-klein"
+              :disabled="aktiveSchultraeger.length === 0"
+              @click="katalogAuswahlOeffnen"
+            >
+              Schulnummer aus Schuldatei wählen
+            </button>
+          </div>
+        </div>
+
+        <div v-if="!ausgewaehlterKatalogEintrag" class="feld feld-checkbox">
+          <label>
+            <input v-model="istSonderfall" type="checkbox" />
+            Sonderfall (kein Eintrag in der Schuldatei)
+          </label>
+        </div>
+
+        <div v-if="!ausgewaehlterKatalogEintrag && istSonderfall" class="feld">
+          <label for="neue-schule-sonderfall-hinweis">Begründung</label>
+          <textarea id="neue-schule-sonderfall-hinweis" v-model="sonderfallHinweis" rows="2"></textarea>
         </div>
 
         <div class="feld">
@@ -315,6 +412,40 @@ async function neueSchuleAbsenden(): Promise<void> {
           <button type="button" class="button-secondary" @click="neueSchuleSchliessen">Abbrechen</button>
         </div>
       </form>
+    </Modal>
+
+    <Modal
+      :open="katalogAuswahlOffen"
+      titel="Schulnummer aus der Schuldatei wählen"
+      @close="katalogAuswahlOffen = false"
+    >
+      <p class="hinweis">
+        Zeigt Schulen der Landes-Schuldatei zum gewählten Schulträger ({{ ausgewaehlteTraegernummer || '–' }}).
+      </p>
+      <form class="katalog-suche" @submit.prevent="katalogSuchen">
+        <div class="feld">
+          <label for="neue-schule-katalog-suche">Suche nach Name, Schulnummer oder Ort</label>
+          <input id="neue-schule-katalog-suche" v-model="katalogSuchbegriff" type="search" />
+        </div>
+        <button type="submit" class="button-secondary">Suchen</button>
+      </form>
+
+      <p v-if="schuldateiStore.schulenError" role="alert" class="fehler">
+        {{ schuldateiStore.schulenError }}
+      </p>
+      <p v-else-if="schuldateiStore.schulenLoading">Lädt …</p>
+      <ul v-else class="katalog-liste">
+        <li v-for="eintrag in schuldateiStore.schulen" :key="eintrag.id">
+          <div>
+            <strong>{{ eintrag.schulname }}</strong>
+            <span class="katalog-hinweis">{{ eintrag.schulnummer }} · {{ eintrag.ort ?? '–' }}</span>
+          </div>
+          <button type="button" class="button-secondary btn-klein" @click="katalogEintragUebernehmen(eintrag)">
+            Übernehmen
+          </button>
+        </li>
+        <li v-if="schuldateiStore.schulen.length === 0" class="katalog-hinweis">Keine Treffer.</li>
+      </ul>
     </Modal>
   </main>
 </template>
@@ -398,6 +529,73 @@ main {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
   border-color: var(--accent);
+}
+
+.feld-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: normal;
+}
+
+.schulnummer-feld {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.schulnummer-feld input {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+
+.katalog-badge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.katalog-suche {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.katalog-suche .feld {
+  flex: 1 1 auto;
+  margin-bottom: 0;
+  max-width: none;
+}
+
+.katalog-liste {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.katalog-liste li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.katalog-hinweis {
+  display: block;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
 }
 
 .aktionen {

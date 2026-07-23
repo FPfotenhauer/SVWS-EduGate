@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { useAuthStore } from '@/auth/authStore'
 import * as schuleApi from '@/api/schuleApi'
 import { ApiError } from '@/types/problem'
-import type { Schule, SchuleFormData } from '@/types/schule'
+import type { Schule, SchuleCreateFormData, SchuleFormData } from '@/types/schule'
 
 export const useSchuleStore = defineStore('schule', () => {
   const items = ref<Schule[]>([])
@@ -26,7 +26,7 @@ export const useSchuleStore = defineStore('schule', () => {
     }
   }
 
-  async function create(schultraegerId: string, data: SchuleFormData): Promise<Schule> {
+  async function create(schultraegerId: string, data: SchuleCreateFormData): Promise<Schule> {
     const created = await schuleApi.createSchule(schultraegerId, data, accessToken)
     await fetchList(schultraegerId)
     return created

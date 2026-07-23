@@ -17,6 +17,9 @@ const beispielSchule: Schule = {
   schulnummer: '123456',
   name: 'Musterschule',
   aktiv: true,
+  katalogId: null,
+  quelle: 'MANUELL',
+  sonderfallHinweis: null,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
 }

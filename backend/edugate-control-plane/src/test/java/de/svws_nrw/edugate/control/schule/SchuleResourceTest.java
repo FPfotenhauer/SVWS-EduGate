@@ -67,6 +67,8 @@ class SchuleResourceTest {
             .body("schulnummer", equalTo("123456"))
             .body("name", equalTo("Musterschule"))
             .body("aktiv", equalTo(true))
+            .body("quelle", equalTo("MANUELL"))
+            .body("katalogId", equalTo(null))
             .extract().path("id");
 
         given().when().get(path + "/" + id).then().statusCode(200).body("id", equalTo(id));
@@ -265,6 +267,75 @@ class SchuleResourceTest {
             .then()
             .statusCode(404)
             .contentType("application/problem+json");
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void sonderfallSetztQuelleUndSpeichertDenHinweis() {
+        final String path = schulenPath(neuenSchultraegerAnlegen());
+        final String body = "{\"schulnummer\": \"555001\", \"name\": \"Sonderschule\", "
+            + "\"sonderfall\": true, \"sonderfallHinweis\": \"Kein Eintrag in der Schuldatei, Neugründung\"}";
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(body)
+            .when().post(path)
+            .then()
+            .statusCode(201)
+            .body("quelle", equalTo("SONDERFALL"))
+            .body("katalogId", equalTo(null))
+            .body("sonderfallHinweis", equalTo("Kein Eintrag in der Schuldatei, Neugründung"));
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void katalogIdSetztQuelleLandeslisteUndUeberschreibtSonderfall() {
+        final UUID katalogId = insertSchuleKatalogEintrag("555002", "Katalogschule");
+        final String path = schulenPath(neuenSchultraegerAnlegen());
+        final String body = "{\"schulnummer\": \"555002\", \"name\": \"Katalogschule\", "
+            + "\"katalogId\": \"" + katalogId + "\", \"sonderfall\": true, \"sonderfallHinweis\": \"wird ignoriert\"}";
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(body)
+            .when().post(path)
+            .then()
+            .statusCode(201)
+            .body("quelle", equalTo("LANDESLISTE"))
+            .body("katalogId", equalTo(katalogId.toString()))
+            .body("sonderfallHinweis", equalTo(null));
+    }
+
+    @Test
+    @TestSecurity(user = ADMIN_USER, roles = "dienstleister-admin")
+    void unbekannteKatalogIdErgibt404() {
+        final String path = schulenPath(neuenSchultraegerAnlegen());
+        final String body = "{\"schulnummer\": \"555003\", \"name\": \"Musterschule\", "
+            + "\"katalogId\": \"" + UUID.randomUUID() + "\"}";
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(body)
+            .when().post(path)
+            .then()
+            .statusCode(404)
+            .contentType("application/problem+json");
+    }
+
+    private UUID insertSchuleKatalogEintrag(final String schulnummer, final String schulname) {
+        try (Connection connection = PostgresTestResource.openAdminConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                 "INSERT INTO schule_katalog (bundeslandkennung, schulnummer, schulname) "
+                     + "VALUES ('NRW', ?, ?) RETURNING id")) {
+            statement.setString(1, schulnummer);
+            statement.setString(2, schulname);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return (UUID) resultSet.getObject("id");
+            }
+        } catch (final Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static String neueSvwsInstanzAnlegen() {
